@@ -132,7 +132,6 @@ class Network_Aware(app_manager.RyuApp):
             dpid = sw.dp.id
             self.switch_port_table.setdefault(dpid, set())
             self.interior_ports.setdefault(dpid, set())
-            # self.outer_ports.setdefault(dpid, set())
             self.access_ports.setdefault(dpid, set())
 
             for p in sw.ports:
@@ -198,7 +197,8 @@ class Network_Aware(app_manager.RyuApp):
 
     @set_ev_cls(event.EventPortDelete, MAIN_DISPATCHER)
     def delete_host(self, ev):
-        if (ev.port.dpid, ev.port.port_no) in self.access_table:
+        key = (ev.port.dpid, ev.port.port_no)
+        if key in self.access_table:
             event = oxp_event.EventOXPHostStateChange(
                 self.oxp_brick.domain, hosts=[(self.access_table[key][0],
                                                self.access_table[key][1],
