@@ -89,7 +89,6 @@ def multiControllerNet(con_num=7, sw_num=35, host_num=70):
 
     #domain7 has not need to add links.
 
-    print "*** Starting network"
     net.build()
     for c in controller_list:
         c.start()
@@ -99,7 +98,7 @@ def multiControllerNet(con_num=7, sw_num=35, host_num=70):
         for j in xrange(sw_num/con_num):
             switch_list[i+j].start([controller_list[_No]])
         _No += 1
-    #print "controllers: ", controller_list
+
     logger.info("*** Setting OpenFlow version")
 
     for sw in switch_list:
@@ -113,5 +112,5 @@ def multiControllerNet(con_num=7, sw_num=35, host_num=70):
     net.stop()
 
 if __name__ == '__main__':
-    setLogLevel('info')  # for CLI output
+    setLogLevel('info')
     multiControllerNet(con_num=7, sw_num=35, host_num=70)

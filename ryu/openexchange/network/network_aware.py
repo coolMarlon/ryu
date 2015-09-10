@@ -46,37 +46,24 @@ class Network_Aware(app_manager.RyuApp):
         super(Network_Aware, self).__init__(*args, **kwargs)
         self.name = "Network_Aware"
         self.topology_api_app = self
-
-        # links   :(src_dpid,dst_dpid)->(src_port,dst_port)
-        self.link_to_port = {}
-
-        # access_table: {(sw,port) :(ip, mac)}
-        # Todo: handle the leave host.
-        self.access_table = {}
-
+        self.link_to_port = {}  # (src_dpid,dst_dpid)->(src_port,dst_port)
+        self.access_table = {}  # {(sw,port) :(ip, mac)}
         self.switch_port_table = {}  # dpid->port_num
-
-        # dpid->port_num (access ports)
-        self.access_ports = {}
-
-        # dpid->port_num(interior ports)
-        self.interior_ports = {}
+        self.access_ports = {}  # dpid->port_num (access ports)
+        self.interior_ports = {}  # dpid->port_num(interior ports)
 
         self.outer_ports = {}
         self.outer_port_no = 1
         self.vport = {}
 
         self.graph = {}
-
         self.pre_link_to_port = {}
         self.pre_graph = {}
         self.pre_access_table = {}
         self.oxp_brick = None
         self.period = CONF.oxp_period
-        # hiding infomation to super.
-        self.fake_datapath = None
-        # save the outer host for searching.
-        self.outer_hosts = set()
+        self.fake_datapath = None  # hiding infomation to super.
+        self.outer_hosts = set()  # save the outer host for searching.
 
     @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)
     def switch_features_handler(self, ev):
@@ -115,7 +102,6 @@ class Network_Aware(app_manager.RyuApp):
     def get_links(self):
         return self.link_to_port
 
-    # get Adjacency matrix from link_to_port
     def get_graph(self, link_list):
         for src in self.switches:
             for dst in self.switches:
@@ -155,8 +141,6 @@ class Network_Aware(app_manager.RyuApp):
         for sw in self.switch_port_table:
             self.access_ports[sw] = self.switch_port_table[
                 sw] - self.interior_ports[sw]
-                # we send the arp to the outer port too
-                # stop it by - self.outer_ports[sw]
 
     events = [event.EventSwitchEnter,
               event.EventSwitchLeave, event.EventPortAdd,
@@ -207,8 +191,6 @@ class Network_Aware(app_manager.RyuApp):
             self.oxp_brick.send_event_to_observers(event, MAIN_DISPATCHER)
 
     def register_access_info(self, dpid, in_port, ip, mac):
-        # Todo:reduce the duplicate host update.
-        # in case the error recode of other domain's host.
         if dpid in self.outer_ports:
             if in_port in self.outer_ports[dpid]:
                 if (dpid, in_port) in self.access_table:
