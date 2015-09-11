@@ -82,9 +82,9 @@ def main(args=None, prog=None):
     elif CONF.oxp_role == 'domain':
         app_lists.extend(
             ['ryu.openexchange.domain.oxp_client_handler',
-             'ryu.openexchange.network.abstract',
-             'ryu.openexchange.network.topo_reply',
-             'ryu.openexchange.network.echo_loop',
+             'ryu.openexchange.domain.abstract',
+             'ryu.openexchange.domain.topo_reply',
+             'ryu.openexchange.domain.echo_loop',
              'ryu.openexchange.domain.translation'])
 
     app_mgr = AppManager.get_instance()

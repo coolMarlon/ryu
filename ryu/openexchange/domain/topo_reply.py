@@ -73,10 +73,9 @@ class TopoReply(app_manager.RyuApp):
         links = []
         for src in vport:
             for dst in vport:
-                src_dpid, src_port_no = self.network.vport[src]
-                dst_dpid, dst_port_no = self.network.vport[dst]
-
-                if src_dpid != dst_dpid and src_dpid > dst_dpid:
+                if src > dst:
+                    src_dpid, src_port_no = self.network.vport[src]
+                    dst_dpid, dst_port_no = self.network.vport[dst]
                     if src_dpid in capabilities:
                         if dst_dpid in capabilities[src_dpid]:
                             cap = capabilities[src_dpid][dst_dpid]
@@ -84,7 +83,6 @@ class TopoReply(app_manager.RyuApp):
                             continue
                     else:
                         continue
-
                     link = self.oxparser.OXPInternallink(src_vport=int(src),
                                                          dst_vport=int(dst),
                                                          capability=str(cap))
@@ -94,7 +92,7 @@ class TopoReply(app_manager.RyuApp):
     def get_capabilities(self):
         self.topology.ports = self.network.vport.keys()
         if len(self.topology.ports):
-            capabilities, paths = get_paths(self.network.graph, CONF.oxp_flags)
+            capabilities, paths = get_paths(self.network.graph, 'floyd_dict')
             self.topology.capabilities = capabilities
             self.topology.paths = paths
             return self.create_links(self.topology.ports, capabilities)

@@ -25,7 +25,8 @@ from ryu.openexchange.network import network_aware
 from ryu.openexchange.network import network_monitor
 
 from ryu.openexchange import oxproto_v1_0
-from ryu.openexchange.routing_algorithm.routing_algorithm import dijkstra
+from ryu.openexchange import oxproto_common
+from ryu.openexchange.routing_algorithm.routing_algorithm import get_paths
 from ryu.openexchange.utils import utils
 from ryu.openexchange.event import oxp_event
 
@@ -38,6 +39,8 @@ class Routing(app_manager.RyuApp):
         self.location = self.module_topo.location
         self.domains = {}
         self.graph = {}
+        self.paths = {}
+        self.capabilities = {}
 
     @set_ev_cls(oxp_event.EventOXPStateChange,
                 [MAIN_DISPATCHER, DEAD_DISPATCHER])
@@ -74,12 +77,32 @@ class Routing(app_manager.RyuApp):
                 [MAIN_DISPATCHER, DEAD_DISPATCHER])
     def get_topology(self, ev):
         self.graph = self.get_graph(self.topology.links, self.domains)
+        if ev is not None:
+            flags = ev.domain.flags
+        else:
+            flags = self.domains.values()[0].flags
+        self.get_path(self.graph, None, ev.domain.flags)
 
-    def get_path(self, graph, src):
-        result = dijkstra(graph, src)
+    def get_path(self, graph, src, flags):
+        function = None
+        if flags == oxproto_common.OXP_ADVANCED_HOP:
+            function = 'floyd_dict'
+        elif flags == oxproto_common.OXP_SIMPLE_HOP:
+            function = 'dijkstra'
+        elif flags == oxproto_common.OXP_ADVANCED_BW:
+            function = None
+        elif flags == oxproto_common.OXP_SIMPLE_BW:
+            function = None
+        else:
+            self.logger.info("No routing algorithm for this model.")
+            return None
+
+        result = get_paths(graph, function, src, self.topology)
         if result:
-            path = result[1]
-            return path
+            self.capabilities = result[0]
+            self.paths = result[1]
+            return self.paths
+
         self.logger.debug("Path is not found.")
         return None
 
@@ -119,13 +142,12 @@ class Routing(app_manager.RyuApp):
         dst_domain = self.get_host_location(ip_dst)
 
         # calculate the path.
-        path_dict = self.get_path(self.graph, src_domain)
-        if path_dict:
+        # print self.graph
+        if self.paths:
             if dst_domain:
-                path = path_dict[src_domain][dst_domain]
-                path.insert(0, src_domain)
-                self.logger.debug(
-                    " PATH[%s --> %s]:%s\n" % (ip_src, ip_dst, path))
+                path = self.paths[src_domain][dst_domain]
+                #self.logger.info(
+                #    " PATH[%s --> %s]:%s\n" % (ip_src, ip_dst, path))
 
                 access_table = {}
                 for domain_id in self.location.locations:

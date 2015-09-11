@@ -66,17 +66,18 @@ def get_link2port(link_to_port, src_dpid, dst_dpid):
 def get_port(dst_ip, access_table):
     # Domain:access_table: {(sw,port) :(ip, mac)}
     # Super: access_table: {domain, OFP_LOCAL:set(ip, ip1, ip2...)}
-    if isinstance(access_table.values()[0], tuple):
-        for key in access_table.keys():
-            if dst_ip == access_table[key][0]:
-                dst_port = key[1]
-                return dst_port
+    if access_table:
+        if isinstance(access_table.values()[0], tuple):
+            for key in access_table.keys():
+                if dst_ip == access_table[key][0]:
+                    dst_port = key[1]
+                    return dst_port
 
-    elif isinstance(access_table.values()[0], set):
-        for key in access_table.keys():
-            if dst_ip in access_table[key]:
-                dst_port = key[1]
-                return dst_port
+        elif isinstance(access_table.values()[0], set):
+            for key in access_table.keys():
+                if dst_ip in access_table[key]:
+                    dst_port = key[1]
+                    return dst_port
     # dst_ip belongs to other domain.
     return None
 
@@ -96,7 +97,7 @@ def install_flow(datapaths, link2port, access_table,
         for i in xrange(1, len(path) - 1):
             port = get_link2port(link2port, path[i-1], path[i])
             port_next = get_link2port(link2port, path[i], path[i + 1])
-            if port:
+            if port and port_next:
                 src_port, dst_port = port[1], port_next[0]
                 datapath = datapaths[path[i]]
                 send_flow_mod(datapath, flow_info, src_port, dst_port)
@@ -177,10 +178,9 @@ def oxp_install_flow(domains, link2port, access_table,
         for i in xrange(1, len(path) - 1):
             port = get_link2port(link2port, path[i-1], path[i])
             port_next = get_link2port(link2port, path[i], path[i + 1])
-            if port:
+            if port and port_next:
                 src_port, dst_port = port[1], port_next[0]
                 domain = domains[path[i]]
-                # oxp_send_packet_out(domain, msg, src_port, dst_port)
                 oxp_send_flow_mod(domain, dp, flow_info, src_port, dst_port)
 
     if len(path) > 1:

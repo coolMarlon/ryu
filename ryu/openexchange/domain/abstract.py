@@ -50,7 +50,7 @@ class Abstract(app_manager.RyuApp):
         self.args = args
         self.network = kwargs["Network_Aware"]
         self.monitor = kwargs["Network_Monitor"]
-        # self.domain = None
+        self.domain = None
         self.oxparser = oxproto_v1_0_parser
         self.oxproto = oxproto_v1_0
         self.topology = topology_data.Domain()
@@ -101,10 +101,9 @@ class Abstract(app_manager.RyuApp):
         links = []
         for src in vport:
             for dst in vport:
-                src_dpid, src_port_no = self.network.vport[src]
-                dst_dpid, dst_port_no = self.network.vport[dst]
-
-                if src_dpid != dst_dpid and src_dpid > dst_dpid:
+                if src > dst:
+                    src_dpid, src_port_no = self.network.vport[src]
+                    dst_dpid, dst_port_no = self.network.vport[dst]
                     if src_dpid in capabilities:
                         if dst_dpid in capabilities[src_dpid]:
                             cap = capabilities[src_dpid][dst_dpid]
@@ -112,7 +111,6 @@ class Abstract(app_manager.RyuApp):
                             continue
                     else:
                         continue
-
                     link = self.oxparser.OXPInternallink(src_vport=int(src),
                                                          dst_vport=int(dst),
                                                          capability=str(cap))
@@ -122,7 +120,7 @@ class Abstract(app_manager.RyuApp):
     def get_capabilities(self):
         self.topology.ports = self.network.vport.keys()
         if len(self.topology.ports):
-            capabilities, paths = get_paths(self.network.graph, CONF.oxp_flags)
+            capabilities, paths = get_paths(self.network.graph, 'floyd_dict')
             self.topology.capabilities = capabilities
             self.topology.paths = paths
             return self.create_links(self.topology.ports, capabilities)
@@ -145,9 +143,9 @@ class Abstract(app_manager.RyuApp):
     @set_ev_cls(oxp_event.EventOXPSBPPacketIn, MAIN_DISPATCHER)
     def sbp_packet_in_handler(self, ev):
         msg = ev.msg
-        domain = ev.domain
+        self.domain = app_manager.lookup_service_brick('oxp_event').domain
         msg.serialize()
 
-        sbp_pkt = self.oxparser.OXPSBP(domain, data=msg.buf)
-        domain.send_msg(sbp_pkt)
+        sbp_pkt = self.oxparser.OXPSBP(self.domain, data=msg.buf)
+        self.domain.send_msg(sbp_pkt)
         return

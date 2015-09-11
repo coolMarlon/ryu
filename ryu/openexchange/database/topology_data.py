@@ -59,6 +59,7 @@ class Domain(data_base.DataBase):
             else:
                 capability = i.capability
             self.links[(i.src_vport, i.dst_vport)] = capability
+            self.links[(i.dst_vport, i.src_vport)] = capability
 
             self.ports.add((i.src_vport, oxproto_v1_0.OXPPS_LIVE))
             self.ports.add((i.dst_vport, oxproto_v1_0.OXPPS_LIVE))
