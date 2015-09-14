@@ -18,8 +18,9 @@ from ryu.topology.api import get_switch, get_link
 
 from ryu.openexchange.network import network_aware
 from ryu.openexchange.network import network_monitor
-from ryu.openexchange.routing_algorithm.routing_algorithm import dijkstra
+from ryu.openexchange.routing_algorithm.routing_algorithm import get_paths
 from ryu.openexchange.utils import utils
+from ryu.openexchange.event import oxp_event
 
 
 class Shortest_forwarding(app_manager.RyuApp):
@@ -50,6 +51,8 @@ class Shortest_forwarding(app_manager.RyuApp):
         self.outer_hosts = set()
 
         self.graph = self.network_aware.graph
+        self.capabilities = {}
+        self.paths = {}
 
     @set_ev_cls(ofp_event.EventOFPStateChange,
                 [MAIN_DISPATCHER, DEAD_DISPATCHER])
@@ -71,11 +74,20 @@ class Shortest_forwarding(app_manager.RyuApp):
         self.logger.debug("%s location is not found." % host_ip)
         return None
 
-    def get_path(self, graph, src):
-        result = dijkstra(graph, src)
+    @set_ev_cls(oxp_event.EventOXPTopoStateChange, MAIN_DISPATCHER)
+    def create_paths(self, ev):
+        result = get_paths(ev.topo, 'floyd_dict')
         if result:
-            path = result[1]
-            return path
+            self.capabilities = result[0]
+            self.paths = result[1]
+            return self.paths
+        self.logger.debug("Path is not found.")
+        return None
+
+    def get_path(self, src, dst):
+        if src in self.paths:
+            if dst in self.paths[src]:
+                return self.paths[src][dst]
         self.logger.debug("Path is not found.")
         return None
 
@@ -135,26 +147,22 @@ class Shortest_forwarding(app_manager.RyuApp):
         dst_location = self.get_host_location(ip_dst)
         if src_location:
             src_sw = src_location[0]
+        else:
+            return
         if dst_location:
             dst_sw = dst_location[0]
 
-        path_dict = self.get_path(self.graph, src_sw)
-        if path_dict:
-            if dst_sw:
-                path = path_dict[src_sw][dst_sw]
-                path.insert(0, src_sw)
-
-                flow_info = (eth_type, ip_src, ip_dst, msg.match['in_port'])
-                utils.install_flow(self.datapaths, self.link_to_port,
-                                   self.access_table, path, flow_info,
-                                   msg.buffer_id, msg.data)
-            else:
-                if isinstance(msg, parser.OFPPacketIn):
-                    self.network_aware.raise_sbp_packet_in_event(
-                        msg, ofproto_v1_3.OFPP_LOCAL, msg.data)
+        if dst_sw:
+            path = self.get_path(src_sw, dst_sw)
+            flow_info = (eth_type, ip_src, ip_dst, msg.match['in_port'])
+            utils.install_flow(self.datapaths, self.link_to_port,
+                               self.access_table, path, flow_info,
+                               msg.buffer_id, msg.data)
         else:
-            # Reflesh the topology database.
-            self.network_aware.get_topology(None)
+            if isinstance(msg, parser.OFPPacketIn):
+                self.network_aware.raise_sbp_packet_in_event(
+                    msg, ofproto_v1_3.OFPP_LOCAL, msg.data)
+        return
 
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
     def _packet_in_handler(self, ev):
@@ -175,6 +183,7 @@ class Shortest_forwarding(app_manager.RyuApp):
             if in_port in self.outer_ports[datapath.id]:
                 # The packet from other domain, ignore it.
                 return
+
         # We implemente oxp in a big network,
         # so we shouldn't care about the subnet and router.
         if isinstance(arp_pkt, arp.arp):

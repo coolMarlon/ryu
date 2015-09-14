@@ -40,7 +40,8 @@ class Network_Aware(app_manager.RyuApp):
     OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
 
     _EVENT = [oxp_event.EventOXPVportStateChange,
-              oxp_event.EventOXPHostStateChange]
+              oxp_event.EventOXPHostStateChange,
+              oxp_event.EventOXPTopoStateChange]
 
     def __init__(self, *args, **kwargs):
         super(Network_Aware, self).__init__(*args, **kwargs)
@@ -162,6 +163,9 @@ class Network_Aware(app_manager.RyuApp):
 
         if self.oxp_brick is None:
             self.oxp_brick = app_manager.lookup_service_brick('oxp_event')
+
+        event = oxp_event.EventOXPTopoStateChange(topo=self.graph)
+        self.oxp_brick.send_event_to_observers(event, MAIN_DISPATCHER)
 
         # If the topo change, reset the CONF.oxp_period.
         # So, topo_reply module can reply in time.

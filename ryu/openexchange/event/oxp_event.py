@@ -136,6 +136,11 @@ class EventOXPLinkDiscovery(event.EventBase):
         self.domain = domain
 
 
+class EventOXPTopoStateChange(event.EventBase):
+    def __init__(self, topo):
+        super(EventOXPTopoStateChange, self).__init__()
+        self.topo = topo
+
 if CONF.oxp_role == 'super':
     handler.register_service('ryu.openexchange.super.oxp_server_handler')
 elif CONF.oxp_role == 'domain':

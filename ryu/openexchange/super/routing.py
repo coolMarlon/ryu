@@ -141,8 +141,6 @@ class Routing(app_manager.RyuApp):
         src_domain = self.get_host_location(ip_src)
         dst_domain = self.get_host_location(ip_dst)
 
-        # calculate the path.
-        # print self.graph
         if self.paths:
             if dst_domain:
                 path = self.paths[src_domain][dst_domain]

@@ -99,11 +99,9 @@ class Translation(app_manager.RyuApp):
                             dst_sw, outer_port = self.network.vport[vport]
                             break
 
-        path_dict = self.router.get_path(self.router.graph, src_sw)
-        if path_dict:
+        if self.router.paths:
             if dst_sw:
-                path = path_dict[src_sw][dst_sw]
-                path.insert(0, src_sw)
+                path = self.router.get_path(src_sw, dst_sw)
                 self.logger.debug(
                     " PATH[%s --> %s]:%s" % (ip_src, ip_dst, path))
 
@@ -116,7 +114,6 @@ class Translation(app_manager.RyuApp):
                                    self.router.access_table, path, flow_info,
                                    ofproto.OFP_NO_BUFFER, data,
                                    outer_port=outer_port)
-                # we should save pakact_out data by buffer.id.
         else:
             self.network.get_topology(None)
 

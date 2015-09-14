@@ -41,7 +41,7 @@ def floyd_dict(graph, src=None, topo=None):
     path = {}
 
     for src in graph:
-        path.setdefault(src, {})
+        path.setdefault(src, {src: [src]})
         for dst in graph[src]:
             if src == dst:
                 continue
@@ -69,7 +69,7 @@ def full_floyd_dict(graph, src=None, topo=None):
     links = topo.links
 
     for src in graph:
-        path.setdefault(src, {})
+        path.setdefault(src, {src: [src]})
         for dst in graph[src]:
             if src == dst:
                 continue
