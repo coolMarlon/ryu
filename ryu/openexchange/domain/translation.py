@@ -78,7 +78,7 @@ class Translation(app_manager.RyuApp):
     def shortest_forwarding(self, msg, eth_type, ip_src, ip_dst):
         ofproto = msg.datapath.ofproto
         parser = msg.datapath.ofproto_parser
-        src_sw = dst_sw = outer_port = data = None
+        src_sw = dst_sw = outer_port = data = flag = None
         in_port = msg.match['in_port']
 
         src_location = self.router.get_host_location(ip_src)
@@ -87,7 +87,6 @@ class Translation(app_manager.RyuApp):
             src_sw, in_port = src_location
         else:
             src_sw, in_port = self.network.vport[in_port]
-
         if dst_location:
             dst_sw = dst_location[0]
         else:
@@ -109,11 +108,13 @@ class Translation(app_manager.RyuApp):
                 if (eth_type, ip_src, ip_dst) in self.buffer:
                     data = self.buffer[(eth_type, ip_src, ip_dst)]
                     del self.buffer[(eth_type, ip_src, ip_dst)]
+                else:
+                    flag = True
                 utils.install_flow(self.router.datapaths,
                                    self.router.link_to_port,
                                    self.router.access_table, path, flow_info,
                                    ofproto.OFP_NO_BUFFER, data,
-                                   outer_port=outer_port)
+                                   outer_port=outer_port, flag=flag)
         else:
             self.network.get_topology(None)
 
@@ -126,4 +127,5 @@ class Translation(app_manager.RyuApp):
         ip_dst = msg.match['ipv4_dst']
         eth_type = msg.match['eth_type']
 
+        # Todo: different model use different algorithm.
         self.shortest_forwarding(msg, eth_type, ip_src, ip_dst)

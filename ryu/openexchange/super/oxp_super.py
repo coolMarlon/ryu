@@ -73,7 +73,6 @@ class Super_Controller(object):
             LOG.info('oxp super controller set up at:%s:%s ' % (
                 CONF.oxp_listen_host, CONF.oxp_tcp_listen_port))
 
-        # LOG.debug('loop')
         server.serve_forever()
 
 

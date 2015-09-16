@@ -8,6 +8,7 @@ Date                Work
 2015/8/3            done
 """
 import logging
+from ryu.openexchange.oxproto_common import OXP_MAX_LEN
 
 LOG = logging.getLogger('ryu.openexchange.routing_algorithm')
 
@@ -33,13 +34,14 @@ def floyd(graph, src=None, topo=None):
                     new_node = k
             if new_node:
                 path[i][j].insert(-1, new_node)
+            elif graph[src][dst] == float('inf'):
+                path[src][dst] = []
+                LOG.debug("No path between %s and %s" % (src, dst))
     return graph, path
 
 
 def floyd_dict(graph, src=None, topo=None):
-    length = len(graph)
     path = {}
-
     for src in graph:
         path.setdefault(src, {src: [src]})
         for dst in graph[src]:
@@ -47,7 +49,6 @@ def floyd_dict(graph, src=None, topo=None):
                 continue
             path[src].setdefault(dst, [src, dst])
             new_node = None
-
             for mid in graph:
                 if mid == dst:
                     continue
@@ -57,11 +58,13 @@ def floyd_dict(graph, src=None, topo=None):
                     new_node = mid
             if new_node:
                 path[src][dst].insert(-1, new_node)
+            elif graph[src][dst] == float('inf'):
+                path[src][dst] = []
+                LOG.debug("No path between %s and %s" % (src, dst))
     return graph, path
 
 
 def full_floyd_dict(graph, src=None, topo=None):
-    length = len(graph)
     path = {}
     src_port = dst_port = None
     in_dist = 0
@@ -79,7 +82,6 @@ def full_floyd_dict(graph, src=None, topo=None):
             for mid in graph:
                 if mid == dst:
                     continue
-
                 if (src, mid) in links:
                     src_port = links[(src, mid)][1]
                     if (mid, dst) in links:
@@ -87,17 +89,19 @@ def full_floyd_dict(graph, src=None, topo=None):
                 if src_port is not None and dst_port is not None:
                     if (src_port, dst_port) in domains[mid].links:
                         in_dist = domains[mid].links[(src_port, dst_port)]
-                    else:
-                        pass
 
                 new_len = graph[src][mid] + graph[mid][dst] + in_dist
                 in_dist = 0
                 src_port = dst_port = None
+
                 if graph[src][dst] > new_len:
                     graph[src][dst] = new_len
                     new_node = mid
             if new_node:
                 path[src][dst].insert(-1, new_node)
+            elif graph[src][dst] == float('inf'):
+                path[src][dst] = []
+                LOG.debug("No path between %s and %s" % (src, dst))
     return graph, path
 
 
@@ -106,14 +110,9 @@ def dijkstra(graph, src, topo=None):
         LOG.info("[Dijkstra]: Graph is empty.")
         return None
     # Initiation
-    length = len(graph)
-    if isinstance(graph, list):
-        nodes = [i for i in xrange(length)]
-    elif isinstance(graph, dict):
-        nodes = graph.keys()
-
+    nodes = graph.keys()
     visited = [src]
-    path = {src: {src: []}}
+    path = {src: {src: [src]}}
     if src not in nodes:
         LOG.debug("[Dijkstra]:Src[%s] is not in nodes." % src)
         return None
@@ -122,11 +121,9 @@ def dijkstra(graph, src, topo=None):
 
     distance_graph = {src: 0}
     pre = next = src
-    no_link_value = 100000
 
-    # Entire graph include non-links.
     while nodes:
-        distance = no_link_value
+        distance = OXP_MAX_LEN
         for v in visited:
             for d in nodes:
                 new_dist = graph[src][v] + graph[v][d]
@@ -134,9 +131,10 @@ def dijkstra(graph, src, topo=None):
                     distance = new_dist
                     next = d
                     pre = v
+                if new_dist < graph[src][d]:
                     graph[src][d] = new_dist
 
-        if distance < no_link_value:
+        if distance < OXP_MAX_LEN:
             path[src][next] = [i for i in path[src][pre]]
             path[src][next].append(next)
             distance_graph[next] = distance
@@ -148,60 +146,50 @@ def dijkstra(graph, src, topo=None):
     return distance_graph, path
 
 
+def get_intra_length(topo, pre, mid, next):
+    if (pre, mid) in topo.links:
+        src_port = topo.links[(pre, mid)][1]
+        if (mid, next) in topo.links:
+            dst_port = topo.links[(mid, next)][0]
+            if (src_port, dst_port) in topo.domains[mid].links:
+                in_dist = topo.domains[mid].links[(src_port, dst_port)]
+                return in_dist
+    return 0
+
+
 def full_dijkstra(graph, src, topo):
     if graph is None:
         LOG.info("[Dijkstra]: Graph is empty.")
         return None
     # Initiation
-    length = len(graph)
-    if isinstance(graph, list):
-        nodes = [i for i in xrange(length)]
-    elif isinstance(graph, dict):
-        nodes = graph.keys()
-
+    nodes = graph.keys()
     visited = [src]
-    path = {src: {src: []}}
+    path = {src: {src: [src]}}
     if src not in nodes:
         LOG.info("[Dijkstra]:Src[%s] is not in nodes." % src)
         return None
     else:
         nodes.remove(src)
-
     distance_graph = {src: 0}
     pre = next = src
-    src_port = dst_port = None
-    no_link_value = 100000
-    in_dist = 0
-    domains = topo.domains
-    links = topo.links
 
-    # Entire graph include non-links.
     while nodes:
-        distance = no_link_value
+        distance = OXP_MAX_LEN
         for v in visited:
             for d in nodes:
-                if (pre, v) in links:
-                    src_port = links[(pre, v)][1]
-                    if (v, d) in links:
-                        dst_port = links[(v, d)][0]
-                if src_port is not None and dst_port is not None:
-                    if (src_port, dst_port) in domains[v].links:
-                        in_dist = domains[v].links[(src_port, dst_port)]
-                    else:
-                        pass
+                if len(path[src][v]) > 1:
+                    _pre = path[src][v][-2]
+                else:
+                    _pre = src
+                in_dist = get_intra_length(topo, _pre, v, d)
+                new_dist = graph[src][v] + graph[v][d] + in_dist
 
-                new_dist = graph[src][v] + graph[v][d]  # + in_dist
-                in_dist = 0
-                src_port = dst_port = None
-                if new_dist <= distance:
+                if new_dist < distance:        # record the min edge.
                     distance = new_dist
                     next = d
                     pre = v
-                    graph[src][d] = new_dist
-
-        if distance < no_link_value:
+        if distance < OXP_MAX_LEN:
             path[src][next] = [i for i in path[src][pre]]
-            print "next, dist: ", next, distance
             path[src][next].append(next)
             distance_graph[next] = distance
             visited.append(next)

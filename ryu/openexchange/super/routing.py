@@ -73,22 +73,12 @@ class Routing(app_manager.RyuApp):
                     graph[src][dst] = link_list[(src, dst)][2]
         return graph
 
-    @set_ev_cls(oxp_event.EventOXPLinkDiscovery,
-                [MAIN_DISPATCHER, DEAD_DISPATCHER])
-    def get_topology(self, ev):
-        self.graph = self.get_graph(self.topology.links, self.domains)
-        if ev is not None:
-            flags = ev.domain.flags
-        else:
-            flags = self.domains.values()[0].flags
-        self.get_path(self.graph, None, ev.domain.flags)
-
     def get_path(self, graph, src, flags):
         function = None
         if flags == oxproto_common.OXP_ADVANCED_HOP:
-            function = 'floyd_dict'
+            function = 'full_dijkstra'
         elif flags == oxproto_common.OXP_SIMPLE_HOP:
-            function = 'dijkstra'
+            function = 'floyd_dict'
         elif flags == oxproto_common.OXP_ADVANCED_BW:
             function = None
         elif flags == oxproto_common.OXP_SIMPLE_BW:
@@ -106,15 +96,17 @@ class Routing(app_manager.RyuApp):
         self.logger.debug("Path is not found.")
         return None
 
-    def arp_forwarding(self, domain, msg, arp_pkt):
+    @set_ev_cls(oxp_event.EventOXPLinkDiscovery,
+                [MAIN_DISPATCHER, DEAD_DISPATCHER])
+    def get_topology(self, ev):
+        self.graph = self.get_graph(self.topology.links, self.domains)
+
+    def arp_forwarding(self, domain, msg, arp_dst_ip):
         datapath = msg.datapath
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
-
-        arp_src_ip = arp_pkt.src_ip
-        arp_dst_ip = arp_pkt.dst_ip
-
         domain_id = self.get_host_location(arp_dst_ip)
+
         if domain_id:
             # build packet_out pkt and put it into sbp, send to domain
             domain = self.domains[domain_id]
@@ -140,23 +132,21 @@ class Routing(app_manager.RyuApp):
         src_domain = dst_domain = None
         src_domain = self.get_host_location(ip_src)
         dst_domain = self.get_host_location(ip_dst)
+        self.get_path(self.graph, src_domain, oxproto_common.OXP_ADVANCED_HOP)
 
         if self.paths:
             if dst_domain:
                 path = self.paths[src_domain][dst_domain]
-                #self.logger.info(
-                #    " PATH[%s --> %s]:%s\n" % (ip_src, ip_dst, path))
+                self.logger.debug("Path[%s-->%s]:%s" % (ip_src, ip_dst, path))
 
                 access_table = {}
                 for domain_id in self.location.locations:
-                    access_table[
-                        (domain_id, ofproto_v1_3.OFPP_LOCAL
-                         )] = self.location.locations[domain_id]
+                    access_table[(domain_id, ofproto_v1_3.OFPP_LOCAL
+                                  )] = self.location.locations[domain_id]
 
                 flow_info = (eth_type, ip_src, ip_dst, msg.match['in_port'])
                 utils.oxp_install_flow(self.domains, self.topology.links,
-                                       access_table, path, flow_info,
-                                       msg)
+                                       access_table, path, flow_info, msg)
         else:
             # Reflesh the topology database.
             self.get_topology(None)
@@ -176,7 +166,7 @@ class Routing(app_manager.RyuApp):
         # We implemente oxp in a big network,
         # so we shouldn't care about the subnet and router.
         if isinstance(arp_pkt, arp.arp):
-            self.arp_forwarding(domain, msg, arp_pkt)
+            self.arp_forwarding(domain, msg, arp_pkt.dst_ip)
 
         if isinstance(ip_pkt, ipv4.ipv4):
             self.shortest_forwarding(domain, msg, eth_type,
