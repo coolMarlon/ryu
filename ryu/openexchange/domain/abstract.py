@@ -120,7 +120,8 @@ class Abstract(app_manager.RyuApp):
     def get_capabilities(self):
         self.topology.ports = self.network.vport.keys()
         if len(self.topology.ports):
-            capabilities, paths = get_paths(self.network.graph, 'floyd_dict')
+            function = setting.function(CONF.oxp_flags)
+            capabilities, paths = get_paths(self.network.graph, function)
             self.topology.capabilities = capabilities
             self.topology.paths = paths
             return self.create_links(self.topology.ports, capabilities)

@@ -14,12 +14,13 @@ from ryu.controller.handler import set_ev_handler
 from ryu.lib.ip import ipv4_to_bin
 from ryu.lib.ip import ipv4_to_str
 from ryu.lib.mac import haddr_to_bin
-
-from ryu.openexchange.network import network_aware
-from ryu.openexchange.network import network_monitor
 from ryu.controller.handler import MAIN_DISPATCHER, DEAD_DISPATCHER
 from ryu.controller.handler import CONFIG_DISPATCHER
 
+from ryu.openexchange.network import network_aware
+from ryu.openexchange.network import network_monitor
+
+from ryu.openexchange.domain import setting
 from ryu.openexchange.event import oxp_event
 from ryu.openexchange.oxproto_common import OXP_MAX_PERIOD
 from ryu.openexchange import oxproto_v1_0
@@ -60,7 +61,7 @@ class TopoReply(app_manager.RyuApp):
         while True:
             if self.domain is not None:
                 self.topo_reply()
-            hub.sleep(CONF.oxp_period)
+            hub.sleep(CONF.oxp_period*60)
 
     @set_ev_cls(oxp_event.EventOXPTopoRequest, MAIN_DISPATCHER)
     def topo_request_handler(self, ev):
@@ -92,7 +93,8 @@ class TopoReply(app_manager.RyuApp):
     def get_capabilities(self):
         self.topology.ports = self.network.vport.keys()
         if len(self.topology.ports):
-            capabilities, paths = get_paths(self.network.graph, 'floyd_dict')
+            function = setting.function(CONF.oxp_flags)
+            capabilities, paths = get_paths(self.network.graph, function)
             self.topology.capabilities = capabilities
             self.topology.paths = paths
             return self.create_links(self.topology.ports, capabilities)

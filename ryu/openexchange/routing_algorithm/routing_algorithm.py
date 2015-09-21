@@ -8,7 +8,6 @@ Date                Work
 2015/8/3            done
 """
 import logging
-from ryu.openexchange.oxproto_common import OXP_MAX_LEN
 
 LOG = logging.getLogger('ryu.openexchange.routing_algorithm')
 
@@ -64,13 +63,21 @@ def floyd_dict(graph, src=None, topo=None):
     return graph, path
 
 
+def get_intra_length(topo, pre, mid, next):
+    if pre == mid or mid == next:
+        return 0
+    if (pre, mid) in topo.links:
+        src_port = topo.links[(pre, mid)][1]
+        if (mid, next) in topo.links:
+            dst_port = topo.links[(mid, next)][0]
+            if (src_port, dst_port) in topo.domains[mid].links:
+                in_dist = topo.domains[mid].links[(src_port, dst_port)]
+                return in_dist
+    return 0
+
+
 def full_floyd_dict(graph, src=None, topo=None):
     path = {}
-    src_port = dst_port = None
-    in_dist = 0
-    domains = topo.domains
-    links = topo.links
-
     for src in graph:
         path.setdefault(src, {src: [src]})
         for dst in graph[src]:
@@ -78,22 +85,22 @@ def full_floyd_dict(graph, src=None, topo=None):
                 continue
             path[src].setdefault(dst, [src, dst])
             new_node = None
-
             for mid in graph:
                 if mid == dst:
                     continue
-                if (src, mid) in links:
-                    src_port = links[(src, mid)][1]
-                    if (mid, dst) in links:
-                        dst_port = links[(mid, dst)][0]
-                if src_port is not None and dst_port is not None:
-                    if (src_port, dst_port) in domains[mid].links:
-                        in_dist = domains[mid].links[(src_port, dst_port)]
 
+                _pre = src
+                if mid in path[src]:
+                    if len(path[src][mid]) > 1:
+                        _pre = path[src][mid][-2]
+                _next = dst
+                if mid in path:
+                    if dst in path[mid]:
+                        if len(path[mid][dst]) > 1:
+                            _next = path[mid][dst][1]
+
+                in_dist = get_intra_length(topo, _pre, mid, _next)
                 new_len = graph[src][mid] + graph[mid][dst] + in_dist
-                in_dist = 0
-                src_port = dst_port = None
-
                 if graph[src][dst] > new_len:
                     graph[src][dst] = new_len
                     new_node = mid
@@ -123,7 +130,7 @@ def dijkstra(graph, src, topo=None):
     pre = next = src
 
     while nodes:
-        distance = OXP_MAX_LEN
+        distance = float('inf')
         for v in visited:
             for d in nodes:
                 new_dist = graph[src][v] + graph[v][d]
@@ -131,10 +138,7 @@ def dijkstra(graph, src, topo=None):
                     distance = new_dist
                     next = d
                     pre = v
-                if new_dist < graph[src][d]:
-                    graph[src][d] = new_dist
-
-        if distance < OXP_MAX_LEN:
+        if distance < float('inf'):
             path[src][next] = [i for i in path[src][pre]]
             path[src][next].append(next)
             distance_graph[next] = distance
@@ -146,15 +150,42 @@ def dijkstra(graph, src, topo=None):
     return distance_graph, path
 
 
-def get_intra_length(topo, pre, mid, next):
-    if (pre, mid) in topo.links:
-        src_port = topo.links[(pre, mid)][1]
-        if (mid, next) in topo.links:
-            dst_port = topo.links[(mid, next)][0]
-            if (src_port, dst_port) in topo.domains[mid].links:
-                in_dist = topo.domains[mid].links[(src_port, dst_port)]
-                return in_dist
-    return 0
+def bw_dijkstra(graph, src, topo=None):
+    if graph is None:
+        LOG.info("[Dijkstra]: Graph is empty.")
+        return None
+    # Initiation
+    nodes = graph.keys()
+    visited = [src]
+    path = {src: {src: [src]}}
+    if src not in nodes:
+        LOG.debug("[Dijkstra]:Src[%s] is not in nodes." % src)
+        return None
+    else:
+        nodes.remove(src)
+
+    distance_graph = {src: 0}
+    pre = next = src
+
+    while nodes:
+        distance = float('inf')
+        for v in visited:
+            for d in nodes:
+                new_dist = graph[src][v] + graph[v][d]
+                if new_dist <= distance:
+                    distance = new_dist
+                    next = d
+                    pre = v
+        if distance < float('inf'):
+            path[src][next] = [i for i in path[src][pre]]
+            path[src][next].append(next)
+            distance_graph[next] = distance
+            visited.append(next)
+            nodes.remove(next)
+        else:
+            LOG.debug("Next node is not found.")
+            return None
+    return distance_graph, path
 
 
 def full_dijkstra(graph, src, topo):
@@ -174,13 +205,12 @@ def full_dijkstra(graph, src, topo):
     pre = next = src
 
     while nodes:
-        distance = OXP_MAX_LEN
+        distance = float('inf')
         for v in visited:
             for d in nodes:
+                _pre = src
                 if len(path[src][v]) > 1:
                     _pre = path[src][v][-2]
-                else:
-                    _pre = src
                 in_dist = get_intra_length(topo, _pre, v, d)
                 new_dist = graph[src][v] + graph[v][d] + in_dist
 
@@ -188,7 +218,7 @@ def full_dijkstra(graph, src, topo):
                     distance = new_dist
                     next = d
                     pre = v
-        if distance < OXP_MAX_LEN:
+        if distance < float('inf'):
             path[src][next] = [i for i in path[src][pre]]
             path[src][next].append(next)
             distance_graph[next] = distance
@@ -214,5 +244,9 @@ def get_paths(graph, func, src=None, topo=None):
     @src: dpid.
     @topo: topo data
     """
-    distance_graph, path_dict = function[func](graph, src=src, topo=topo)
-    return distance_graph, path_dict
+    if func:
+        distance_graph, path_dict = function[func](graph, src=src, topo=topo)
+        return distance_graph, path_dict
+    else:
+        LOG.info("Function is None")
+        return None

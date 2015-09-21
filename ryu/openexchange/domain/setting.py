@@ -8,6 +8,8 @@ Date                Work
 
 '''
 from ryu import cfg
+from ryu.openexchange import oxproto_common
+
 
 CONF = cfg.CONF
 
@@ -22,3 +24,24 @@ features = {'domain_id': CONF.oxp_domain_id,
             'proto_type': CONF.sbp_proto_type,
             'capabilities': CONF.oxp_capabilities,
             }
+
+# CONF.oxp_flags
+
+domain_function = {oxproto_common.OXP_ADVANCED_HOP: 'floyd_dict',
+                   oxproto_common.OXP_SIMPLE_HOP: 'floyd_dict',
+                   oxproto_common.OXP_ADVANCED_BW: None,
+                   oxproto_common.OXP_SIMPLE_BW: None}
+
+super_function = {oxproto_common.OXP_ADVANCED_HOP: 'full_floyd_dict',
+                  oxproto_common.OXP_SIMPLE_HOP: 'floyd_dict',
+                  oxproto_common.OXP_ADVANCED_BW: None,
+                  oxproto_common.OXP_SIMPLE_BW: None}
+
+
+def function(flags):
+    if CONF.oxp_role == 'domain':
+        return domain_function[flags]
+    if CONF.oxp_role == 'super':
+        return super_function[flags]
+    else:
+        return

@@ -52,9 +52,12 @@ class Network_Monitor(app_manager.RyuApp):
                 self.port_link.setdefault(dp.id, {})
                 self._request_stats(dp)
             hub.sleep(SLEEP_PERIOD)
-            if self.stats['flow'] or self.stats['port']:
-                # self.show_stat('flow', self.stats['flow'])
-                # self.show_stat('port', self.stats['port'])
+
+            if self.stats['flow']:
+                self.show_stat('flow', self.stats['flow'])
+                hub.sleep(1)
+            if self.stats['port']:
+                self.show_stat('port', self.stats['port'])
                 hub.sleep(1)
 
     def _request_stats(self, datapath):
@@ -254,7 +257,6 @@ class Network_Monitor(app_manager.RyuApp):
                        ofproto.OFPPR_MODIFY: "modified", }
 
         if reason in reason_dict:
-
             print "switch%d: port %s %s" % (dpid, reason_dict[reason], port_no)
         else:
             print "switch%d: Illeagal port state %s %s" % (port_no, reason)

@@ -26,6 +26,7 @@ from ryu.openexchange.network import network_monitor
 
 from ryu.openexchange import oxproto_v1_0
 from ryu.openexchange import oxproto_common
+from ryu.openexchange.domain import setting
 from ryu.openexchange.routing_algorithm.routing_algorithm import get_paths
 from ryu.openexchange.utils import utils
 from ryu.openexchange.event import oxp_event
@@ -75,18 +76,7 @@ class Routing(app_manager.RyuApp):
 
     def get_path(self, graph, src, flags):
         function = None
-        if flags == oxproto_common.OXP_ADVANCED_HOP:
-            function = 'full_dijkstra'
-        elif flags == oxproto_common.OXP_SIMPLE_HOP:
-            function = 'floyd_dict'
-        elif flags == oxproto_common.OXP_ADVANCED_BW:
-            function = None
-        elif flags == oxproto_common.OXP_SIMPLE_BW:
-            function = None
-        else:
-            self.logger.info("No routing algorithm for this model.")
-            return None
-
+        function = setting.function(flags)
         result = get_paths(graph, function, src, self.topology)
         if result:
             self.capabilities = result[0]
@@ -100,6 +90,11 @@ class Routing(app_manager.RyuApp):
                 [MAIN_DISPATCHER, DEAD_DISPATCHER])
     def get_topology(self, ev):
         self.graph = self.get_graph(self.topology.links, self.domains)
+        self.get_path(self.graph, None, ev.domain.flags)
+
+    @set_ev_cls(oxp_event.EventOXPTopoReply, MAIN_DISPATCHER)
+    def get_path_dict(self, ev):
+        self.get_path(self.graph, None, ev.msg.domain.flags)
 
     def arp_forwarding(self, domain, msg, arp_dst_ip):
         datapath = msg.datapath
@@ -132,8 +127,6 @@ class Routing(app_manager.RyuApp):
         src_domain = dst_domain = None
         src_domain = self.get_host_location(ip_src)
         dst_domain = self.get_host_location(ip_dst)
-        self.get_path(self.graph, src_domain, oxproto_common.OXP_ADVANCED_HOP)
-
         if self.paths:
             if dst_domain:
                 path = self.paths[src_domain][dst_domain]
