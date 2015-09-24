@@ -96,6 +96,9 @@ def install_flow(datapaths, link2port, access_table, path,
         flow_info=(eth_type, src_ip, dst_ip, in_port)
         outer_port: port face to other domain.
     '''
+    if path is None:
+        LOG.info("Path is None.")
+        return
     if len(path) == 0:
         LOG.info("Path is Empty.")
         return

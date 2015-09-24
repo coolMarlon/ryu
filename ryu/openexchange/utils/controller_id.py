@@ -9,6 +9,11 @@ _DPID_LEN_STR = str(_DPID_LEN)
 _DPID_FMT = '%0' + _DPID_LEN_STR + 'x'
 DPID_PATTERN = r'[0-9a-f]{%d}' % _DPID_LEN
 
+_CAP_LEN = 6
+_CAP_LEN_STR = str(_CAP_LEN)
+_CAP_FMT = '%0' + _CAP_LEN_STR + 'x'
+CAP_PATTERN = r'[0-9a-f]{%d}' % _CAP_LEN
+
 
 def dpid_to_str(dpid):
     return _DPID_FMT % dpid
@@ -17,3 +22,12 @@ def dpid_to_str(dpid):
 def str_to_dpid(dpid_str):
     assert len(dpid_str) == _DPID_LEN
     return int(dpid_str, 16)
+
+
+def cap_to_str(cap):
+    return _CAP_FMT % cap
+
+
+def str_to_cap(cap_str):
+    assert len(cap_str) == _CAP_LEN
+    return int(cap_str, 16)

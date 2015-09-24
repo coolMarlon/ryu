@@ -22,12 +22,14 @@ from ryu.openexchange.network import network_monitor
 
 from ryu.openexchange.domain import setting
 from ryu.openexchange.event import oxp_event
-from ryu.openexchange.oxproto_common import OXP_MAX_PERIOD
+from ryu.openexchange.oxproto_common import OXP_MAX_PERIOD, OXP_SIMPLE_BW
+from ryu.openexchange.oxproto_common import OXP_MAX_CAPACITY
 from ryu.openexchange import oxproto_v1_0
 from ryu.openexchange import oxproto_v1_0_parser
 from ryu.openexchange.oxproto_v1_0 import OXPP_ACTIVE
 from ryu.openexchange.oxproto_v1_0 import OXPPS_LIVE
 from ryu.openexchange import topology_data
+from ryu.openexchange.utils.controller_id import cap_to_str
 from ryu.openexchange.routing_algorithm.routing_algorithm import get_paths
 from ryu import cfg
 from ryu.lib import hub
@@ -51,17 +53,19 @@ class TopoReply(app_manager.RyuApp):
         self.args = args
         self.network = kwargs["Network_Aware"]
         self.monitor = kwargs["Network_Monitor"]
+        self.free_band_width = self.monitor.free_band_width
         self.domain = None
         self.oxparser = None
         self.topology = topology_data.Domain()
         self.monitor_thread = hub.spawn(self._monitor)
         self.links = []
+        self.abstract = app_manager.lookup_service_brick('oxp_abstract')
 
     def _monitor(self):
         while True:
             if self.domain is not None:
                 self.topo_reply()
-            hub.sleep(CONF.oxp_period*60)
+            hub.sleep(CONF.oxp_period)
 
     @set_ev_cls(oxp_event.EventOXPTopoRequest, MAIN_DISPATCHER)
     def topo_request_handler(self, ev):
@@ -70,38 +74,14 @@ class TopoReply(app_manager.RyuApp):
         self.topology.domain_id = self.domain.id
         self.oxparser = self.domain.oxproto_parser
 
-    def create_links(self, vport=[], capabilities={}):
-        links = []
-        for src in vport:
-            for dst in vport:
-                if src > dst:
-                    src_dpid, src_port_no = self.network.vport[src]
-                    dst_dpid, dst_port_no = self.network.vport[dst]
-                    if src_dpid in capabilities:
-                        if dst_dpid in capabilities[src_dpid]:
-                            cap = capabilities[src_dpid][dst_dpid]
-                        else:
-                            continue
-                    else:
-                        continue
-                    link = self.oxparser.OXPInternallink(src_vport=int(src),
-                                                         dst_vport=int(dst),
-                                                         capability=str(cap))
-                    links.append(link)
-        return links
-
-    def get_capabilities(self):
+    def get_link_capabilities(self):
+        if self.abstract is None:
+            self.abstract = app_manager.lookup_service_brick('oxp_abstract')
+        return self.abstract.get_link_capabilities()
         self.topology.ports = self.network.vport.keys()
-        if len(self.topology.ports):
-            function = setting.function(CONF.oxp_flags)
-            capabilities, paths = get_paths(self.network.graph, function)
-            self.topology.capabilities = capabilities
-            self.topology.paths = paths
-            return self.create_links(self.topology.ports, capabilities)
-        return None
 
     def topo_reply(self):
-        links = self.get_capabilities()
+        links = self.get_link_capabilities()
         if links == self.links:
             if CONF.oxp_period < OXP_MAX_PERIOD:
                 CONF.oxp_period += 1

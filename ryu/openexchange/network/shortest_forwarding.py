@@ -1,7 +1,8 @@
 # conding=utf-8
 import logging
 import struct
-from operator import attrgetter
+import networkx as nx
+
 from ryu.base import app_manager
 from ryu.controller import ofp_event
 from ryu.controller.handler import MAIN_DISPATCHER, DEAD_DISPATCHER
@@ -18,9 +19,15 @@ from ryu.topology.api import get_switch, get_link
 
 from ryu.openexchange.network import network_aware
 from ryu.openexchange.network import network_monitor
+from ryu.openexchange.domain import setting
+from ryu.openexchange.oxproto_common import OXP_SIMPLE_BW
+from ryu.openexchange.routing_algorithm import routing_algorithm
 from ryu.openexchange.routing_algorithm.routing_algorithm import get_paths
 from ryu.openexchange.utils import utils
 from ryu.openexchange.event import oxp_event
+from ryu import cfg
+
+CONF = cfg.CONF
 
 
 class Shortest_forwarding(app_manager.RyuApp):
@@ -36,7 +43,7 @@ class Shortest_forwarding(app_manager.RyuApp):
         self.network_aware = kwargs["Network_Aware"]
         self.network_monitor = kwargs["Network_Monitor"]
         self.mac_to_port = {}
-        self.datapaths = {}
+        self.datapaths = self.network_aware.datapaths
 
         # links   :(src_dpid,dst_dpid)->(src_port,dst_port)
         self.link_to_port = self.network_aware.link_to_port
@@ -44,60 +51,22 @@ class Shortest_forwarding(app_manager.RyuApp):
         # {sw :[host1_ip,host2_ip,host3_ip,host4_ip]}
         self.access_table = self.network_aware.access_table
 
-        # dpid->port_num (ports without link)
-        self.access_ports = self.network_aware.access_ports
-
         self.outer_ports = self.network_aware.outer_ports
-        self.outer_hosts = set()
-
-        self.graph = self.network_aware.graph
-        self.capabilities = {}
+        self.abstract = app_manager.lookup_service_brick('oxp_abstract')
         self.paths = {}
 
-    @set_ev_cls(ofp_event.EventOFPStateChange,
-                [MAIN_DISPATCHER, DEAD_DISPATCHER])
-    def _state_change_handler(self, ev):
-        datapath = ev.datapath
-        if ev.state == MAIN_DISPATCHER:
-            if not datapath.id in self.datapaths:
-                self.logger.debug('register datapath: %016x', datapath.id)
-                self.datapaths[datapath.id] = datapath
-        elif ev.state == DEAD_DISPATCHER:
-            if datapath.id in self.datapaths:
-                self.logger.debug('unregister datapath: %016x', datapath.id)
-                del self.datapaths[datapath.id]
-
-    def get_host_location(self, host_ip):
-        for key in self.access_table:
-            if self.access_table[key][0] == host_ip:
-                return key
-        self.logger.debug("%s location is not found." % host_ip)
-        return None
-
-    @set_ev_cls(oxp_event.EventOXPTopoStateChange, MAIN_DISPATCHER)
-    def create_paths(self, ev):
-        result = get_paths(ev.topo, 'floyd_dict')
-        if result:
-            self.capabilities = result[0]
-            self.paths = result[1]
-            return self.paths
-        self.logger.debug("Path is not found.")
-        return None
-
     def get_path(self, src, dst):
-        if src in self.paths:
-            if dst in self.paths[src]:
-                return self.paths[src][dst]
-        self.logger.debug("Path is not found.")
-        return None
+        if self.abstract is None:
+            self.abstract = app_manager.lookup_service_brick('oxp_abstract')
+        return self.abstract.get_path(src, dst)
 
     def flood(self, msg):
         datapath = msg.datapath
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
 
-        for dpid in self.access_ports:
-            for port in self.access_ports[dpid]:
+        for dpid in self.network_aware.access_ports:
+            for port in self.network_aware.access_ports[dpid]:
                 if (dpid, port) not in self.access_table.keys():
                     datapath = self.datapaths[dpid]
                     out = utils._build_packet_out(
@@ -109,14 +78,8 @@ class Shortest_forwarding(app_manager.RyuApp):
         datapath = msg.datapath
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
-        # dst in other domain, send to super and return.
-        if dst_ip in self.outer_hosts:
-            if isinstance(msg, parser.OFPPacketIn):
-                self.network_aware.raise_sbp_packet_in_event(
-                    msg, ofproto_v1_3.OFPP_LOCAL, msg.data)
-                return
-        # host in domain.
-        result = self.get_host_location(dst_ip)
+
+        result = self.network_aware.get_host_location(dst_ip)
         if result:  # host record in access table.
             datapath_dst, out_port = result[0], result[1]
             datapath = self.datapaths[datapath_dst]
@@ -126,16 +89,6 @@ class Shortest_forwarding(app_manager.RyuApp):
             datapath.send_msg(out)
         else:
             self.flood(msg)
-            # we can not send arp to super every time.
-            if isinstance(msg, parser.OFPPacketIn):
-                self.network_aware.raise_sbp_packet_in_event(
-                    msg, ofproto_v1_3.OFPP_LOCAL, msg.data)
-        # packet_out from super, record src.
-        if isinstance(msg, parser.OFPPacketOut):
-            for sw in self.access_table:
-                if src_ip in self.access_table[sw]:
-                    return
-            self.outer_hosts.add(src_ip)
 
     def shortest_forwarding(self, msg, eth_type, ip_src, ip_dst):
         datapath = msg.datapath
@@ -143,8 +96,8 @@ class Shortest_forwarding(app_manager.RyuApp):
         parser = datapath.ofproto_parser
         src_sw = dst_sw = None
 
-        src_location = self.get_host_location(ip_src)
-        dst_location = self.get_host_location(ip_dst)
+        src_location = self.network_aware.get_host_location(ip_src)
+        dst_location = self.network_aware.get_host_location(ip_dst)
         if src_location:
             src_sw = src_location[0]
         else:
@@ -158,10 +111,6 @@ class Shortest_forwarding(app_manager.RyuApp):
             utils.install_flow(self.datapaths, self.link_to_port,
                                self.access_table, path, flow_info,
                                msg.buffer_id, msg.data)
-        else:
-            if isinstance(msg, parser.OFPPacketIn):
-                self.network_aware.raise_sbp_packet_in_event(
-                    msg, ofproto_v1_3.OFPP_LOCAL, msg.data)
         return
 
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
@@ -181,7 +130,7 @@ class Shortest_forwarding(app_manager.RyuApp):
 
         if datapath.id in self.outer_ports:
             if in_port in self.outer_ports[datapath.id]:
-                # The packet from other domain, ignore it.
+                # The packet from other domain, MUST ignore it!!
                 return
 
         # We implemente oxp in a big network,

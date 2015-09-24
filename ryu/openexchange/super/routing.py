@@ -1,6 +1,8 @@
 # conding=utf-8
 import logging
 import struct
+import networkx as nx
+
 from operator import attrgetter
 from ryu.base import app_manager
 from ryu.controller import ofp_event
@@ -26,10 +28,14 @@ from ryu.openexchange.network import network_monitor
 
 from ryu.openexchange import oxproto_v1_0
 from ryu.openexchange import oxproto_common
+from ryu.openexchange.oxproto_common import OXP_SIMPLE_HOP, OXP_SIMPLE_BW
 from ryu.openexchange.domain import setting
 from ryu.openexchange.routing_algorithm.routing_algorithm import get_paths
 from ryu.openexchange.utils import utils
 from ryu.openexchange.event import oxp_event
+from ryu import cfg
+
+CONF = cfg.CONF
 
 
 class Routing(app_manager.RyuApp):
@@ -39,7 +45,7 @@ class Routing(app_manager.RyuApp):
         self.topology = self.module_topo.topo
         self.location = self.module_topo.location
         self.domains = {}
-        self.graph = {}
+        self.graph = nx.DiGraph()
         self.paths = {}
         self.capabilities = {}
 
@@ -61,18 +67,41 @@ class Routing(app_manager.RyuApp):
         self.logger.debug("%s location is not found." % host_ip)
         return None
 
-    # get Adjacency matrix from inter-links.
     def get_graph(self, link_list, nodes):
-        graph = {}
-        for src in nodes.keys():
-            for dst in nodes.keys():
-                graph.setdefault(src, {dst: float('inf')})
-                graph[src][dst] = float('inf')
-                if src == dst:
-                    graph[src][src] = 0
-                elif (src, dst) in link_list:
-                    graph[src][dst] = link_list[(src, dst)][2]
+        graph = nx.DiGraph()
+        if OXP_SIMPLE_HOP == CONF.oxp_flags & OXP_SIMPLE_HOP:
+            for src in nodes.keys():
+                for dst in nodes.keys():
+                    graph.add_edge(src, dst, weight=float('inf'))
+                    if src == dst:
+                        graph[src][src]['weight'] = 0
+                    elif (src, dst) in link_list:
+                        graph[src][dst]['weight'] = link_list[(src, dst)][2]
+        if OXP_SIMPLE_BW == CONF.oxp_flags & OXP_SIMPLE_BW:
+            for src in nodes.keys():
+                for dst in nodes.keys():
+                    graph.add_edge(src, dst, weight=float('inf'))
+                    if src == dst:
+                        graph[src][src]['weight'] = 0
+                    elif (src, dst) in link_list:
+                        graph[src][dst]['weight'] = 1
+                        graph[src][dst]['bandwidth'] = link_list[(src, dst)][2]
+        '''for src in graph:
+            for dst in graph[src]:
+                print src, dst, graph[src][dst]
+        '''
         return graph
+
+    def get_bw_graph(self, graph, link_list):
+        for src in graph.nodes():
+            for dst in graph[src]:
+                if (src, dst) in link_list:
+                    graph[src][dst]['bandwidth'] = link_list[(src, dst)][2]
+        return graph
+
+    @set_ev_cls(oxp_event.EventOXPTrafficStateChange, MAIN_DISPATCHER)
+    def reflesh_bw_graph(self, ev):
+        self.graph = self.get_bw_graph(self.graph, self.topology.links)
 
     def get_path(self, graph, src, flags):
         function = None
@@ -113,7 +142,8 @@ class Routing(app_manager.RyuApp):
 
             sbp_pkt = domain.oxproto_parser.OXPSBP(domain, data=out.buf)
             domain.send_msg(sbp_pkt)
-        else:   # access info is not existed. send to all UNknow access port
+        else:
+            # access info is not existed. send to all UNknow access port
             for domain in self.domains.values():
                 out = utils._build_packet_out(
                     datapath, ofproto.OFP_NO_BUFFER,

@@ -26,16 +26,15 @@ features = {'domain_id': CONF.oxp_domain_id,
             }
 
 # CONF.oxp_flags
-
 domain_function = {oxproto_common.OXP_ADVANCED_HOP: 'floyd_dict',
                    oxproto_common.OXP_SIMPLE_HOP: 'floyd_dict',
-                   oxproto_common.OXP_ADVANCED_BW: None,
-                   oxproto_common.OXP_SIMPLE_BW: None}
+                   oxproto_common.OXP_ADVANCED_BW: 'best_paths_by_bw',
+                   oxproto_common.OXP_SIMPLE_BW: 'best_paths_by_bw'}
 
 super_function = {oxproto_common.OXP_ADVANCED_HOP: 'full_floyd_dict',
                   oxproto_common.OXP_SIMPLE_HOP: 'floyd_dict',
-                  oxproto_common.OXP_ADVANCED_BW: None,
-                  oxproto_common.OXP_SIMPLE_BW: None}
+                  oxproto_common.OXP_ADVANCED_BW: 'best_paths_by_bw',
+                  oxproto_common.OXP_SIMPLE_BW: 'best_paths_by_bw'}
 
 
 def function(flags):

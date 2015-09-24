@@ -24,7 +24,8 @@ from ryu.openexchange.database import topology_data
 from ryu.openexchange.database import host_data
 from ryu.openexchange import oxproto_v1_0
 from ryu.openexchange.domain import config
-from ryu.openexchange.oxproto_common import OXP_DEFAULT_FLAGS
+from ryu.openexchange.oxproto_common import OXP_SIMPLE_HOP, OXP_SIMPLE_BW, \
+    OXP_MAX_CAPACITY
 
 from ryu.ofproto import ofproto_common, ofproto_parser
 from ryu.topology import switches
@@ -37,6 +38,9 @@ class Topology(app_manager.RyuApp):
     '''
         Collect topology data include host data and topo data.
     '''
+    _EVENT = [oxp_event.EventOXPTrafficStateChange,
+              oxp_event.EventOXPLinkDiscovery]
+
     def __init__(self, *args, **kwargs):
         super(Topology, self).__init__(*args, **kwargs)
         self.name = 'oxp_topology'
@@ -79,6 +83,12 @@ class Topology(app_manager.RyuApp):
         msg = ev.msg
         domain = msg.domain
         self.topo.domains[domain.id].update_link(domain, msg.links)
+        self.topo.refresh_inter_links_capabilities()
+
+        if OXP_SIMPLE_BW == CONF.oxp_flags & OXP_SIMPLE_BW:
+            event = oxp_event.EventOXPTrafficStateChange(
+                traffic=None)
+            self.oxp_brick.send_event_to_observers(event, MAIN_DISPATCHER)
 
     @set_ev_cls(oxp_event.EventOXPHostReply, MAIN_DISPATCHER)
     def host_reply_handler(self, ev):
@@ -101,13 +111,30 @@ class Topology(app_manager.RyuApp):
 
         try:
             src_domain_id, src_vport_no = switches.LLDPPacket.lldp_parse(data)
-            if OXP_DEFAULT_FLAGS == CONF.oxp_flags & OXP_DEFAULT_FLAGS:
+            if OXP_SIMPLE_HOP == CONF.oxp_flags & OXP_SIMPLE_HOP:
                 link = {(domain.id, src_domain_id): (in_port, src_vport_no, 1),
                         (src_domain_id, domain.id): (src_vport_no, in_port, 1)}
                 self.topo.update_link(link)
+            elif OXP_SIMPLE_BW == CONF.oxp_flags & OXP_SIMPLE_BW:
+                domain_topo = self.topo.domains[domain.id]
+                src_domain_topo = self.topo.domains[src_domain_id]
 
-                event = oxp_event.EventOXPLinkDiscovery(domain)
-                self.oxp_brick.send_event_to_observers(event, MAIN_DISPATCHER)
+                if (in_port, in_port) in domain_topo.links and \
+                        (src_vport_no, src_vport_no) in src_domain_topo.links:
+                    bw_ = domain_topo.links[(in_port, in_port)]
+                    bwSrc = src_domain_topo.links[(src_vport_no, src_vport_no)]
+                    bw = float(min(bw_, bwSrc))
+                else:
+                    bw = OXP_MAX_CAPACITY
+
+                L = {(domain.id, src_domain_id): (in_port, src_vport_no, bw),
+                     (src_domain_id, domain.id): (src_vport_no, in_port, bw)}
+                self.topo.update_link(L)
+            else:
+                pass
+
+            event = oxp_event.EventOXPLinkDiscovery(domain)
+            self.oxp_brick.send_event_to_observers(event, MAIN_DISPATCHER)
 
         except switches.LLDPPacket.LLDPUnknownFormat as e:
             return

@@ -38,7 +38,8 @@ class Translation(app_manager.RyuApp):
 
         self.args = args
         self.network = app_manager.lookup_service_brick("Network_Aware")
-        self.router = app_manager.lookup_service_brick('shortest_forwarding')
+        self.router = app_manager.lookup_service_brick('oxp_basic_handler')
+        self.abstract = app_manager.lookup_service_brick('oxp_abstract')
         self.domain = None
         self.oxparser = oxproto_v1_0_parser
         self.oxproto = oxproto_v1_0
@@ -57,7 +58,11 @@ class Translation(app_manager.RyuApp):
 
         if msg.actions[0].port == ofproto_v1_3.OFPP_LOCAL:
             if isinstance(arp_pkt, arp.arp):
-                self.router.arp_forwarding(msg, arp_pkt.src_ip, arp_pkt.dst_ip)
+                if self.router is None:
+                    self.router = app_manager.lookup_service_brick(
+                        'oxp_basic_handler')
+                self.router.oxp_arp_forwarding(msg, arp_pkt.src_ip,
+                                               arp_pkt.dst_ip)
             #save msg.data for flow_mod.
             elif isinstance(ip_pkt, ipv4.ipv4):
                 self.buffer[(eth_type, ip_pkt.src, ip_pkt.dst)] = msg.data
@@ -65,7 +70,7 @@ class Translation(app_manager.RyuApp):
             # packet_out to datapath:port.
             vport = msg.actions[0].port
             dpid, port = self.network.vport[vport]
-            datapath = self.router.datapaths[dpid]
+            datapath = self.network.datapaths[dpid]
             ofproto = datapath.ofproto
             out = utils._build_packet_out(datapath, ofproto.OFP_NO_BUFFER,
                                           ofproto.OFPP_CONTROLLER,
@@ -81,8 +86,8 @@ class Translation(app_manager.RyuApp):
         src_sw = dst_sw = outer_port = data = flag = None
         in_port = msg.match['in_port']
 
-        src_location = self.router.get_host_location(ip_src)
-        dst_location = self.router.get_host_location(ip_dst)
+        src_location = self.network.get_host_location(ip_src)
+        dst_location = self.network.get_host_location(ip_dst)
         if src_location:
             src_sw, in_port = src_location
         else:
@@ -97,10 +102,9 @@ class Translation(app_manager.RyuApp):
                             vport = action.port
                             dst_sw, outer_port = self.network.vport[vport]
                             break
-
-        if self.router.paths:
+        if self.abstract.paths:
             if dst_sw:
-                path = self.router.get_path(src_sw, dst_sw)
+                path = self.abstract.get_path(src_sw, dst_sw)
                 self.logger.debug(
                     " PATH[%s --> %s]:%s" % (ip_src, ip_dst, path))
 
@@ -110,9 +114,9 @@ class Translation(app_manager.RyuApp):
                     del self.buffer[(eth_type, ip_src, ip_dst)]
                 else:
                     flag = True
-                utils.install_flow(self.router.datapaths,
-                                   self.router.link_to_port,
-                                   self.router.access_table, path, flow_info,
+                utils.install_flow(self.network.datapaths,
+                                   self.network.link_to_port,
+                                   self.network.access_table, path, flow_info,
                                    ofproto.OFP_NO_BUFFER, data,
                                    outer_port=outer_port, flag=flag)
         else:
@@ -127,5 +131,4 @@ class Translation(app_manager.RyuApp):
         ip_dst = msg.match['ipv4_dst']
         eth_type = msg.match['eth_type']
 
-        # Todo: different model use different algorithm.
         self.shortest_forwarding(msg, eth_type, ip_src, ip_dst)

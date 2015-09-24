@@ -141,6 +141,12 @@ class EventOXPTopoStateChange(event.EventBase):
         super(EventOXPTopoStateChange, self).__init__()
         self.topo = topo
 
+
+class EventOXPTrafficStateChange(event.EventBase):
+    def __init__(self, traffic):
+        super(EventOXPTrafficStateChange, self).__init__()
+        self.traffic = traffic
+
 if CONF.oxp_role == 'super':
     handler.register_service('ryu.openexchange.super.oxp_server_handler')
 elif CONF.oxp_role == 'domain':

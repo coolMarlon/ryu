@@ -27,7 +27,13 @@ from ryu.openexchange import oxproto_v1_0_parser
 from ryu.openexchange.oxproto_v1_0 import OXPP_ACTIVE
 from ryu.openexchange.oxproto_v1_0 import OXPPS_LIVE
 from ryu.openexchange import topology_data
+from ryu.openexchange.domain import setting
+from ryu.openexchange.oxproto_common import OXP_SIMPLE_BW
+from ryu.openexchange.oxproto_common import OXP_MAX_CAPACITY
+from ryu.openexchange.routing_algorithm import routing_algorithm
 from ryu.openexchange.routing_algorithm.routing_algorithm import get_paths
+
+from ryu.openexchange.utils.controller_id import cap_to_str
 from ryu import cfg
 
 CONF = cfg.CONF
@@ -50,10 +56,19 @@ class Abstract(app_manager.RyuApp):
         self.args = args
         self.network = kwargs["Network_Aware"]
         self.monitor = kwargs["Network_Monitor"]
+        self.link_to_port = self.network.link_to_port
+        self.graph = self.network.graph
+
+        self.free_band_width = self.monitor.free_band_width
         self.domain = None
         self.oxparser = oxproto_v1_0_parser
         self.oxproto = oxproto_v1_0
         self.topology = topology_data.Domain()
+
+        self.capabilities = {}
+        self.paths = {}
+        self.multi_paths = {}
+        self.links = {}
 
     @set_ev_cls(oxp_event.EventOXPVportStateChange, MAIN_DISPATCHER)
     def vport_handler(self, ev):
@@ -97,6 +112,39 @@ class Abstract(app_manager.RyuApp):
         host_reply = self.oxparser.OXPHostReply(domain, hosts)
         domain.send_msg(host_reply)
 
+    def create_links_bw(self, vport=[], capabilities={}):
+        links = []
+        for src in vport:
+            for dst in vport:
+                if src > dst:
+                    src_dpid, src_port_no = self.network.vport[src]
+                    dst_dpid, dst_port_no = self.network.vport[dst]
+                    if src_dpid in capabilities:
+                        if dst_dpid in capabilities[src_dpid]:
+                            cap = capabilities[src_dpid][dst_dpid]
+                        else:
+                            continue
+                    else:
+                        continue
+                    link = self.oxparser.OXPInternallink(
+                        src_vport=int(src), dst_vport=int(dst),
+                        capability=cap_to_str(cap))
+                    links.append(link)
+                    continue
+
+                if src == dst:
+                    src_dpid, src_port_no = self.network.vport[src]
+                    cap = OXP_MAX_CAPACITY
+                    if src_dpid in self.free_band_width:
+                        if src_port_no in self.free_band_width[src_dpid]:
+                            cap = self.free_band_width[src_dpid][src_port_no]
+
+                    link = self.oxparser.OXPInternallink(
+                        src_vport=int(src), dst_vport=int(src),
+                        capability=cap_to_str(cap))
+                    links.append(link)
+        return links
+
     def create_links(self, vport=[], capabilities={}):
         links = []
         for src in vport:
@@ -111,25 +159,81 @@ class Abstract(app_manager.RyuApp):
                             continue
                     else:
                         continue
-                    link = self.oxparser.OXPInternallink(src_vport=int(src),
-                                                         dst_vport=int(dst),
-                                                         capability=str(cap))
+                    link = self.oxparser.OXPInternallink(
+                        src_vport=int(src), dst_vport=int(dst),
+                        capability=cap_to_str(cap))
                     links.append(link)
         return links
 
-    def get_capabilities(self):
+    def create_bw_graph(self, graph, link2port, bw_dict):
+        for link in link2port:
+            (src_dpid, dst_dpid) = link
+            (src_port, dst_port) = link2port[link]
+
+            if src_dpid in bw_dict and dst_dpid in bw_dict:
+                bw_src = bw_dict[src_dpid][src_port]
+                bw_dst = bw_dict[dst_dpid][dst_port]
+                graph[src_dpid][dst_dpid]['bandwidth'] = min(bw_src, bw_dst)
+            else:
+                graph[src_dpid][dst_dpid]['bandwidth'] = 0
+        return graph
+
+    @set_ev_cls(oxp_event.EventOXPTrafficStateChange, MAIN_DISPATCHER)
+    def reflesh_bw_best_path(self, ev):
+        self.free_band_width = ev.traffic
+        self.graph = self.create_bw_graph(
+            self.graph, self.link_to_port, self.free_band_width)
+
+        capabilities, best_paths = routing_algorithm.band_width_compare(
+            self.graph, self.multi_paths, self.paths)
+
+        self.capabilities = capabilities
+        self.paths = best_paths
+        self.topo_reply(self.domain)
+
+    def get_path(self, src, dst):
+        if src in self.paths:
+            if dst in self.paths[src]:
+                return self.paths[src][dst]
+        self.logger.debug("Path is not found.")
+        return None
+
+    @set_ev_cls(oxp_event.EventOXPTopoStateChange, MAIN_DISPATCHER)
+    def create_paths(self, ev):
+        graph = ev.topo
+        function = setting.function(CONF.oxp_flags)
+        # TODO: a better way to implement.
+        if OXP_SIMPLE_BW == CONF.oxp_flags & OXP_SIMPLE_BW:
+            self.graph = self.create_bw_graph(graph, self.link_to_port,
+                                              self.free_band_width)
+        result = get_paths(graph, function)
+        if result:
+            self.capabilities = result[0]
+            self.paths = result[1]
+            if OXP_SIMPLE_BW == CONF.oxp_flags & OXP_SIMPLE_BW:
+                self.multi_paths = result[2]
+            return self.paths
+        self.logger.debug("Path is not found.")
+        return None
+
+    def get_link_capabilities(self):
         self.topology.ports = self.network.vport.keys()
         if len(self.topology.ports):
-            function = setting.function(CONF.oxp_flags)
-            capabilities, paths = get_paths(self.network.graph, function)
-            self.topology.capabilities = capabilities
-            self.topology.paths = paths
-            return self.create_links(self.topology.ports, capabilities)
+            self.topology.capabilities = self.capabilities
+            self.topology.paths = self.paths
+
+            if OXP_SIMPLE_BW == CONF.oxp_flags & OXP_SIMPLE_BW:
+                links = self.create_links_bw(self.topology.ports,
+                                             self.capabilities)
+            else:
+                links = self.create_links(self.topology.ports,
+                                          self.capabilities)
+            return links
         return None
 
     def topo_reply(self, domain):
-        links = self.get_capabilities()
-        topo_reply = self.oxparser.OXPTopoReply(domain, links=links)
+        self.links = self.get_link_capabilities()
+        topo_reply = self.oxparser.OXPTopoReply(domain, links=self.links)
         domain.send_msg(topo_reply)
 
     @set_ev_cls(oxp_event.EventOXPTopoRequest, MAIN_DISPATCHER)
@@ -138,6 +242,7 @@ class Abstract(app_manager.RyuApp):
         self.topology.domain_id = domain.id
         self.oxproto = domain.oxproto
         self.oxparser = domain.oxproto_parser
+        self.domain = domain
 
         self.topo_reply(domain)
 

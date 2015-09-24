@@ -1,5 +1,4 @@
 # conding=utf-8
-
 from __future__ import division
 from operator import attrgetter
 from ryu.base import app_manager
@@ -10,26 +9,35 @@ from ryu.controller.handler import set_ev_cls
 from ryu.ofproto import ofproto_v1_3
 from ryu.lib import hub
 from ryu.lib.packet import packet
+from ryu.openexchange.event import oxp_event
+from ryu.openexchange.oxproto_common import OXP_SIMPLE_BW
+from ryu import cfg
 
-SLEEP_PERIOD = 10
+CONF = cfg.CONF
+
+SLEEP_PERIOD = CONF.oxp_period + 2
 
 
 class Network_Monitor(app_manager.RyuApp):
     OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
     _NAME = 'Network_Monitor'
+    _EVENT = [oxp_event.EventOXPTrafficStateChange]
 
     def __init__(self, *args, **kwargs):
         super(Network_Monitor, self).__init__(*args, **kwargs)
 
         self.datapaths = {}
         self.port_stats = {}
-        self.port_speed = {}
+        self.port_speed = {}    # MB/s
         self.flow_stats = {}
-        self.flow_speed = {}
+        self.flow_speed = {}    # MB/s
         # {"port":{dpid:{port:body,..},..},"flow":{dpid:body,..}
+        self.free_band_width = {}
+        # {dpid:{port_no:free_band_width Mbit/s}}
         self.stats = {}
         self.port_link = {}  # {dpid:{port_no:(config,state,cur),..},..}
         self.monitor_thread = hub.spawn(self._monitor)
+        self.oxp_brick = app_manager.lookup_service_brick('oxp_event')
 
     @set_ev_cls(ofp_event.EventOFPStateChange,
                 [MAIN_DISPATCHER, DEAD_DISPATCHER])
@@ -52,26 +60,27 @@ class Network_Monitor(app_manager.RyuApp):
                 self.port_link.setdefault(dp.id, {})
                 self._request_stats(dp)
             hub.sleep(SLEEP_PERIOD)
-
+            '''
             if self.stats['flow']:
                 self.show_stat('flow', self.stats['flow'])
                 hub.sleep(1)
             if self.stats['port']:
                 self.show_stat('port', self.stats['port'])
                 hub.sleep(1)
+            '''
 
     def _request_stats(self, datapath):
         self.logger.debug('send stats request: %016x', datapath.id)
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
 
-        req = parser.OFPFlowStatsRequest(datapath)
+        req = parser.OFPPortDescStatsRequest(datapath, 0)
         datapath.send_msg(req)
+
+        # req = parser.OFPFlowStatsRequest(datapath)
+        # datapath.send_msg(req)
 
         req = parser.OFPPortStatsRequest(datapath, 0, ofproto.OFPP_ANY)
-        datapath.send_msg(req)
-
-        req = parser.OFPPortDescStatsRequest(datapath, 0)
         datapath.send_msg(req)
 
     def _save_stats(self, dist, key, value, length):
@@ -82,11 +91,16 @@ class Network_Monitor(app_manager.RyuApp):
         if len(dist[key]) > length:
             dist[key].pop(0)
 
-    def _get_speed(self, now, pre, period):
+    def _get_speed(self, current, pre, period):
         if period:
-            return (now - pre) / (period)
+            #current: n Byte   return n MB/s
+            return (current - pre) / 10**6 / period
         else:
             return 0
+
+    def _get_free_bw(self, capacity, speed):
+        # BW:Mbit/s
+        return capacity / 10**3 - speed * 8
 
     def _get_time(self, sec, nsec):
         return sec + nsec / (10 ** 9)
@@ -102,7 +116,7 @@ class Network_Monitor(app_manager.RyuApp):
         if(type == 'flow'):
 
             print('datapath         ''   in-port        ip-dst      '
-                  'out-port packets  bytes  flow-speed(B/s)')
+                  'out-port packets  bytes  flow-speed(MB/s)')
             print('---------------- ''  -------- ----------------- '
                   '-------- -------- -------- -----------')
             for dpid in bodys.keys():
@@ -122,8 +136,8 @@ class Network_Monitor(app_manager.RyuApp):
 
         if(type == 'port'):
             print('datapath             port   ''rx-pkts  rx-bytes rx-error '
-                  'tx-pkts  tx-bytes tx-error  port-speed(B/s)'
-                  ' current-capacity(Kbps)  '
+                  'tx-pkts  tx-bytes tx-error  port-speed(MB/s)'
+                  ' current-capacity(Mbps)  '
                   'port-stat   link-stat')
             print('----------------   -------- ''-------- -------- -------- '
                   '-------- -------- -------- '
@@ -138,7 +152,7 @@ class Network_Monitor(app_manager.RyuApp):
                             stat.rx_packets, stat.rx_bytes, stat.rx_errors,
                             stat.tx_packets, stat.tx_bytes, stat.tx_errors,
                             abs(self.port_speed[(dpid, stat.port_no)][-1]),
-                            self.port_link[dpid][stat.port_no][2],
+                            self.port_link[dpid][stat.port_no][2]/10**3,
                             self.port_link[dpid][stat.port_no][0],
                             self.port_link[dpid][stat.port_no][1]))
             print '\n'
@@ -156,35 +170,37 @@ class Network_Monitor(app_manager.RyuApp):
             value = (
                 stat.packet_count, stat.byte_count,
                 stat.duration_sec, stat.duration_nsec)
-            self._save_stats(self.flow_stats, key, value, 5)
+            self._save_stats(self.flow_stats, key, value, 3)
 
             # Get flow's speed.
             pre = 0
             period = SLEEP_PERIOD
-            tmp = self.flow_stats[key]
-            if len(tmp) > 1:
-                pre = tmp[-2][1]
-                period = self._get_period(
-                    tmp[-1][2], tmp[-1][3],
-                    tmp[-2][2], tmp[-2][3])
+            stats = self.flow_stats[key]
+            if len(stats) > 1:
+                pre = stats[-2][1]
+                period = self._get_period(stats[-1][2], stats[-1][3],
+                                          stats[-2][2], stats[-2][3])
 
-            speed = self._get_speed(
-                self.flow_stats[key][-1][1], pre, period)
-
-            self._save_stats(self.flow_speed, key, speed, 5)
+            speed = self._get_speed(self.flow_stats[key][-1][1], pre, period)
+            self._save_stats(self.flow_speed, key, speed, 3)
 
     @set_ev_cls(ofp_event.EventOFPPortStatsReply, MAIN_DISPATCHER)
     def _port_stats_reply_handler(self, ev):
         body = ev.msg.body
-        self.stats['port'][ev.msg.datapath.id] = body
+        dpid = ev.msg.datapath.id
+        self.stats['port'][dpid] = body
+
+        self.free_band_width.setdefault(dpid, {})
+
         for stat in sorted(body, key=attrgetter('port_no')):
-            if stat.port_no != ofproto_v1_3.OFPP_LOCAL:
-                key = (ev.msg.datapath.id, stat.port_no)
+            port_no = stat.port_no
+            if port_no != ofproto_v1_3.OFPP_LOCAL:
+                key = (dpid, port_no)
                 value = (
                     stat.tx_bytes, stat.rx_bytes, stat.rx_errors,
                     stat.duration_sec, stat.duration_nsec)
 
-                self._save_stats(self.port_stats, key, value, 5)
+                self._save_stats(self.port_stats, key, value, 3)
 
                 # Get port speed.
                 pre = 0
@@ -199,8 +215,20 @@ class Network_Monitor(app_manager.RyuApp):
                 speed = self._get_speed(
                     self.port_stats[key][-1][0] + self.port_stats[key][-1][1],
                     pre, period)
+                self._save_stats(self.port_speed, key, speed, 3)
 
-                self._save_stats(self.port_speed, key, speed, 5)
+                self.free_band_width[dpid].setdefault(port_no, None)
+
+                capacity = self.port_link[dpid][port_no][2]
+                curr_bw = self._get_free_bw(capacity, speed)
+                self.free_band_width[dpid][port_no] = curr_bw
+
+        #raise oxp_event
+        if OXP_SIMPLE_BW == CONF.oxp_flags & OXP_SIMPLE_BW:
+            event = oxp_event.EventOXPTrafficStateChange(
+                traffic=self.free_band_width)
+            self.oxp_brick = app_manager.lookup_service_brick('oxp_event')
+            self.oxp_brick.send_event_to_observers(event, MAIN_DISPATCHER)
 
     @set_ev_cls(ofp_event.EventOFPPortDescStatsReply, MAIN_DISPATCHER)
     def port_desc_stats_reply_handler(self, ev):

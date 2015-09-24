@@ -75,18 +75,20 @@ def main(args=None, prog=None):
         app_lists = ['ryu.controller.ofp_handler']
 
     if CONF.oxp_role == 'super':
-        app_lists.extend(['ryu.openexchange.super.oxp_server_handler',
-                          'ryu.openexchange.super.topology',
-                          'ryu.openexchange.super.routing'])
-
+        start_lists = ['ryu.openexchange.super.oxp_server_handler',
+                       'ryu.openexchange.super.topology',
+                       'ryu.openexchange.super.routing']
+        start_lists.extend(app_lists)
+        app_lists = start_lists
     elif CONF.oxp_role == 'domain':
-        app_lists.extend(
-            ['ryu.openexchange.domain.oxp_client_handler',
-             'ryu.openexchange.domain.abstract',
-             'ryu.openexchange.domain.topo_reply',
-             'ryu.openexchange.domain.echo_loop',
-             'ryu.openexchange.domain.translation'])
-
+        start_lists = ['ryu.openexchange.domain.oxp_client_handler',
+                       'ryu.openexchange.domain.abstract',
+                       'ryu.openexchange.domain.topo_reply',
+                       'ryu.openexchange.domain.echo_loop',
+                       'ryu.openexchange.network.oxp_basic_handler',
+                       'ryu.openexchange.domain.translation']
+        start_lists.extend(app_lists)
+        app_lists = start_lists
     app_mgr = AppManager.get_instance()
     app_mgr.load_apps(app_lists)
     contexts = app_mgr.create_contexts()

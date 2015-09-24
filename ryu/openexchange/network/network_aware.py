@@ -2,6 +2,8 @@
 import logging
 import struct
 import time
+import networkx as nx
+
 from operator import attrgetter
 from ryu.base import app_manager
 from ryu.controller import ofp_event
@@ -47,6 +49,7 @@ class Network_Aware(app_manager.RyuApp):
         super(Network_Aware, self).__init__(*args, **kwargs)
         self.name = "Network_Aware"
         self.topology_api_app = self
+        self.datapaths = {}
         self.link_to_port = {}  # (src_dpid,dst_dpid)->(src_port,dst_port)
         self.access_table = {}  # {(sw,port) :(ip, mac)}
         self.switch_port_table = {}  # dpid->port_num
@@ -57,14 +60,27 @@ class Network_Aware(app_manager.RyuApp):
         self.outer_port_no = 1
         self.vport = {}
 
-        self.graph = {}
+        self.graph = nx.DiGraph()
         self.pre_link_to_port = {}
-        self.pre_graph = {}
+        self.pre_graph = nx.DiGraph()
         self.pre_access_table = {}
         self.oxp_brick = None
         self.period = CONF.oxp_period
         self.fake_datapath = None  # hiding infomation to super.
         self.outer_hosts = set()  # save the outer host for searching.
+
+    @set_ev_cls(ofp_event.EventOFPStateChange,
+                [MAIN_DISPATCHER, DEAD_DISPATCHER])
+    def _state_change_handler(self, ev):
+        datapath = ev.datapath
+        if ev.state == MAIN_DISPATCHER:
+            if not datapath.id in self.datapaths:
+                self.logger.debug('register datapath: %016x', datapath.id)
+                self.datapaths[datapath.id] = datapath
+        elif ev.state == DEAD_DISPATCHER:
+            if datapath.id in self.datapaths:
+                self.logger.debug('unregister datapath: %016x', datapath.id)
+                del self.datapaths[datapath.id]
 
     @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)
     def switch_features_handler(self, ev):
@@ -97,6 +113,13 @@ class Network_Aware(app_manager.RyuApp):
                                 match=match, instructions=inst)
         dp.send_msg(mod)
 
+    def get_host_location(self, host_ip):
+        for key in self.access_table:
+            if self.access_table[key][0] == host_ip:
+                return key
+        self.logger.debug("%s location is not found." % host_ip)
+        return None
+
     def get_switches(self):
         return self.switches
 
@@ -106,12 +129,11 @@ class Network_Aware(app_manager.RyuApp):
     def get_graph(self, link_list):
         for src in self.switches:
             for dst in self.switches:
-                self.graph.setdefault(src, {dst: float('inf')})
-                self.graph[src][dst] = float('inf')
+                self.graph.add_edge(src, dst, weight=float('inf'))
                 if src == dst:
-                    self.graph[src][src] = 0
+                    self.graph.add_edge(src, dst, weight=0)
                 elif (src, dst) in link_list:
-                    self.graph[src][dst] = 1
+                    self.graph.add_edge(src, dst, weight=1)
         return self.graph
 
     def create_port_map(self, switch_list):
@@ -329,19 +351,20 @@ class Network_Aware(app_manager.RyuApp):
 
     # show topo
     def show_topology(self):
-        switch_num = len(self.graph)
+        switch_num = len(self.graph.nodes())
         if self.pre_graph != self.graph or IS_UPDATE:
             print "---------------------Topo Link---------------------"
             print '%10s' % ("switch"),
             for i in xrange(1, switch_num + 1):
                 print '%10d' % i,
             print ""
-            for i in self.graph.keys():
+            for i in self.graph.nodes():
                 print '%10d' % i,
                 for j in self.graph[i].values():
-                    print '%10.0f' % j,
+                    print '%10.0f' % j['weight'],
                 print ""
             self.pre_graph = self.graph
+
         if self.pre_link_to_port != self.link_to_port or IS_UPDATE:
             print "---------------------Link Port---------------------"
             print '%10s' % ("switch"),

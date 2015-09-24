@@ -11,7 +11,10 @@ esle, it is an intralink.
 """
 from . import data_base
 from ryu.openexchange import oxproto_v1_0
-from ryu.openexchange.oxproto_common import OXP_DEFAULT_FLAGS
+from ryu.openexchange.oxproto_common import OXP_SIMPLE_HOP, OXP_SIMPLE_BW
+from ryu import cfg
+
+CONF = cfg.CONF
 
 
 class Domain(data_base.DataBase):
@@ -54,10 +57,7 @@ class Domain(data_base.DataBase):
 
     def update_link(self, domain, links):
         for i in links:
-            if OXP_DEFAULT_FLAGS == domain.flags:
-                capability = int(i.capability[0])
-            else:
-                capability = i.capability
+            capability = int(i.capability, 16)   # Default way.
             self.links[(i.src_vport, i.dst_vport)] = capability
             self.links[(i.dst_vport, i.src_vport)] = capability
 
@@ -108,3 +108,16 @@ class Super_Topo(data_base.DataBase):
     def delete_domain(self, domain):
         if domain in self.domains:
             self.domains.remove(domain)
+
+    def refresh_inter_links_capabilities(self):
+        if OXP_SIMPLE_BW == CONF.oxp_flags & OXP_SIMPLE_BW:
+            # reflesh the inter-links' bandwidth.
+            for link in self.links:
+                src, dst = link
+                src_port, dst_port, cap = self.links[link]
+                if (src_port, src_port) in self.domains[src].links and \
+                        (dst_port, dst_port) in self.domains[dst].links:
+                    bw_src = self.domains[src].links[(src_port, src_port)]
+                    bw_dst = self.domains[dst].links[(dst_port, dst_port)]
+                    min_bw = min(bw_src, bw_dst)
+                    self.links[link] = (src_port, dst_port, min_bw)
