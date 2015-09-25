@@ -94,7 +94,6 @@ def super_connection(socket, address):
     LOG.info('Connect to Super Controller:%s address:%s', socket, address)
     with contextlib.closing(Super_Controller(socket, address)) as _super:
         try:
-            # Domain_Network.serve()
             _super.serve()
             return _super
         except:

@@ -107,8 +107,8 @@ class OXPVPort(oxproto_parser.namedtuple('OXPVPort', (
     def parser(cls, buf, offset):
         port = struct.unpack_from(oxproto.OXP_VPORT_PACK_STR,
                                   buf, offset)
-        port = list(port)   # ?
-        return cls(*port)   # Why *, list?
+        port = list(port)
+        return cls(*port)
 
 
 class OXPHost(oxproto_parser.namedtuple('OXPHost', (

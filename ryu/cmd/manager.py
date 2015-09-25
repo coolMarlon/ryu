@@ -85,7 +85,7 @@ def main(args=None, prog=None):
                        'ryu.openexchange.domain.abstract',
                        'ryu.openexchange.domain.topo_reply',
                        'ryu.openexchange.domain.echo_loop',
-                       'ryu.openexchange.network.oxp_basic_handler',
+                       'ryu.openexchange.network.network_basic_handler',
                        'ryu.openexchange.domain.translation']
         start_lists.extend(app_lists)
         app_lists = start_lists

@@ -13,9 +13,6 @@ from ryu.controller.handler import set_ev_cls
 from ryu.controller.handler import set_ev_handler
 from ryu.lib.ip import ipv4_to_bin
 from ryu.lib.mac import haddr_to_bin
-
-from ryu.openexchange.network import network_aware
-from ryu.openexchange.network import network_monitor
 from ryu.controller.handler import MAIN_DISPATCHER, DEAD_DISPATCHER
 from ryu.controller.handler import CONFIG_DISPATCHER
 
@@ -24,16 +21,23 @@ from ryu.topology import event, switches
 from ryu.openexchange.event import oxp_event
 from ryu.openexchange import oxproto_v1_0
 from ryu.openexchange import oxproto_v1_0_parser
+
+from ryu.openexchange.network import network_aware
+from ryu.openexchange.network import network_monitor
+
 from ryu.openexchange.oxproto_v1_0 import OXPP_ACTIVE
 from ryu.openexchange.oxproto_v1_0 import OXPPS_LIVE
+from ryu.openexchange.oxproto_common import OXP_MAX_CAPACITY
+
 from ryu.openexchange import topology_data
 from ryu.openexchange.domain import setting
-from ryu.openexchange.oxproto_common import OXP_SIMPLE_BW
-from ryu.openexchange.oxproto_common import OXP_MAX_CAPACITY
+
 from ryu.openexchange.routing_algorithm import routing_algorithm
 from ryu.openexchange.routing_algorithm.routing_algorithm import get_paths
 
 from ryu.openexchange.utils.controller_id import cap_to_str
+from ryu.openexchange.utils.utils import check_model_is_advanced
+from ryu.openexchange.utils.utils import check_model_is_bw
 from ryu import cfg
 
 CONF = cfg.CONF
@@ -60,7 +64,7 @@ class Abstract(app_manager.RyuApp):
         self.graph = self.network.graph
 
         self.free_band_width = self.monitor.free_band_width
-        self.domain = None
+        self.domain = app_manager.lookup_service_brick('oxp_event').domain
         self.oxparser = oxproto_v1_0_parser
         self.oxproto = oxproto_v1_0
         self.topology = topology_data.Domain()
@@ -115,34 +119,33 @@ class Abstract(app_manager.RyuApp):
     def create_links_bw(self, vport=[], capabilities={}):
         links = []
         for src in vport:
-            for dst in vport:
-                if src > dst:
-                    src_dpid, src_port_no = self.network.vport[src]
-                    dst_dpid, dst_port_no = self.network.vport[dst]
-                    if src_dpid in capabilities:
-                        if dst_dpid in capabilities[src_dpid]:
-                            cap = capabilities[src_dpid][dst_dpid]
+            src_dpid, src_port_no = self.network.vport[src]
+            cap = OXP_MAX_CAPACITY
+            if src_dpid in self.free_band_width:
+                if src_port_no in self.free_band_width[src_dpid]:
+                    cap = self.free_band_width[src_dpid][src_port_no]
+
+            link = self.oxparser.OXPInternallink(
+                src_vport=int(src), dst_vport=int(src),
+                capability=cap_to_str(cap))
+            links.append(link)
+
+            if check_model_is_advanced():
+                for dst in vport:
+                    if src > dst:
+                        src_dpid, src_port_no = self.network.vport[src]
+                        dst_dpid, dst_port_no = self.network.vport[dst]
+                        if src_dpid in capabilities:
+                            if dst_dpid in capabilities[src_dpid]:
+                                cap = capabilities[src_dpid][dst_dpid]
+                            else:
+                                continue
                         else:
                             continue
-                    else:
-                        continue
-                    link = self.oxparser.OXPInternallink(
-                        src_vport=int(src), dst_vport=int(dst),
-                        capability=cap_to_str(cap))
-                    links.append(link)
-                    continue
-
-                if src == dst:
-                    src_dpid, src_port_no = self.network.vport[src]
-                    cap = OXP_MAX_CAPACITY
-                    if src_dpid in self.free_band_width:
-                        if src_port_no in self.free_band_width[src_dpid]:
-                            cap = self.free_band_width[src_dpid][src_port_no]
-
-                    link = self.oxparser.OXPInternallink(
-                        src_vport=int(src), dst_vport=int(src),
-                        capability=cap_to_str(cap))
-                    links.append(link)
+                        link = self.oxparser.OXPInternallink(
+                            src_vport=int(src), dst_vport=int(dst),
+                            capability=cap_to_str(cap))
+                        links.append(link)
         return links
 
     def create_links(self, vport=[], capabilities={}):
@@ -189,6 +192,8 @@ class Abstract(app_manager.RyuApp):
 
         self.capabilities = capabilities
         self.paths = best_paths
+        if self.domain is None:
+            self.domain = app_manager.lookup_service_brick('oxp_event').domain
         self.topo_reply(self.domain)
 
     def get_path(self, src, dst):
@@ -202,15 +207,14 @@ class Abstract(app_manager.RyuApp):
     def create_paths(self, ev):
         graph = ev.topo
         function = setting.function(CONF.oxp_flags)
-        # TODO: a better way to implement.
-        if OXP_SIMPLE_BW == CONF.oxp_flags & OXP_SIMPLE_BW:
+        if check_model_is_bw():
             self.graph = self.create_bw_graph(graph, self.link_to_port,
                                               self.free_band_width)
         result = get_paths(graph, function)
         if result:
             self.capabilities = result[0]
             self.paths = result[1]
-            if OXP_SIMPLE_BW == CONF.oxp_flags & OXP_SIMPLE_BW:
+            if check_model_is_bw():
                 self.multi_paths = result[2]
             return self.paths
         self.logger.debug("Path is not found.")
@@ -222,12 +226,14 @@ class Abstract(app_manager.RyuApp):
             self.topology.capabilities = self.capabilities
             self.topology.paths = self.paths
 
-            if OXP_SIMPLE_BW == CONF.oxp_flags & OXP_SIMPLE_BW:
+            links = []
+            if check_model_is_bw():
                 links = self.create_links_bw(self.topology.ports,
                                              self.capabilities)
             else:
-                links = self.create_links(self.topology.ports,
-                                          self.capabilities)
+                if check_model_is_advanced():
+                    links = self.create_links(self.topology.ports,
+                                              self.capabilities)
             return links
         return None
 
@@ -238,19 +244,20 @@ class Abstract(app_manager.RyuApp):
 
     @set_ev_cls(oxp_event.EventOXPTopoRequest, MAIN_DISPATCHER)
     def topo_request_handler(self, ev):
-        domain = ev.msg.domain
-        self.topology.domain_id = domain.id
-        self.oxproto = domain.oxproto
-        self.oxparser = domain.oxproto_parser
-        self.domain = domain
+        if check_model_is_advanced():
+            domain = ev.msg.domain
+            self.topology.domain_id = domain.id
+            self.oxproto = domain.oxproto
+            self.oxparser = domain.oxproto_parser
 
-        self.topo_reply(domain)
+            self.topo_reply(domain)
 
     @set_ev_cls(oxp_event.EventOXPSBPPacketIn, MAIN_DISPATCHER)
     def sbp_packet_in_handler(self, ev):
         msg = ev.msg
-        self.domain = app_manager.lookup_service_brick('oxp_event').domain
         msg.serialize()
+        if self.domain is None:
+            self.domain = app_manager.lookup_service_brick('oxp_event').domain
 
         sbp_pkt = self.oxparser.OXPSBP(self.domain, data=msg.buf)
         self.domain.send_msg(sbp_pkt)

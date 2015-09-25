@@ -20,7 +20,7 @@ from ryu.topology.api import get_switch, get_link
 from ryu.openexchange.network import network_aware
 from ryu.openexchange.network import network_monitor
 from ryu.openexchange.domain import setting
-from ryu.openexchange.oxproto_common import OXP_SIMPLE_BW
+
 from ryu.openexchange.routing_algorithm import routing_algorithm
 from ryu.openexchange.routing_algorithm.routing_algorithm import get_paths
 from ryu.openexchange.utils import utils
@@ -39,7 +39,7 @@ class OXP_Basic_Handler(app_manager.RyuApp):
 
     def __init__(self, *args, **kwargs):
         super(OXP_Basic_Handler, self).__init__(*args, **kwargs)
-        self.name = 'oxp_basic_handler'
+        self.name = 'network_basic_handler'
         self.network_aware = kwargs["Network_Aware"]
         self.network_monitor = kwargs["Network_Monitor"]
         self.mac_to_port = {}

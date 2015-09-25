@@ -3,8 +3,31 @@ Define some utils functions.
 """
 import logging
 from ryu.ofproto.ofproto_v1_3 import OFPP_TABLE
+from ryu.openexchange.oxproto_common import OXP_ADVANCED_MODEL
+from ryu.openexchange.oxproto_common import OXP_BW_MODEL, OXP_HOP_MODEL
+from ryu import cfg
+
 
 LOG = logging.getLogger('ryu.openexchange.utils')
+CONF = cfg.CONF
+
+
+def check_model_is_advanced():
+    if OXP_ADVANCED_MODEL == CONF.oxp_flags & OXP_ADVANCED_MODEL:
+        return True
+    return False
+
+
+def check_model_is_bw():
+    if OXP_BW_MODEL == CONF.oxp_flags & OXP_BW_MODEL:
+        return True
+    return False
+
+
+def check_model_is_hop():
+    if OXP_HOP_MODEL == CONF.oxp_flags & OXP_HOP_MODEL:
+        return True
+    return False
 
 
 def send_barrier_request(datapath):

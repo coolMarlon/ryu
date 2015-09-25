@@ -6,12 +6,13 @@ Author:www.muzixing.com
 Date                Work
 2015/8/3            new
 2015/8/3            done
+2015/9/25           add best_paths_by_bw, using networkx
 """
 import logging
 import networkx as nx
 from ryu import cfg
 import copy
-from ryu.openexchange.oxproto_common import OXP_MAX_CAPACITY
+from ryu.openexchange.oxproto_common import OXP_MAX_CAPACITY, OXP_ADVANCED_BW
 
 CONF = cfg.CONF
 LOG = logging.getLogger('ryu.openexchange.routing_algorithm')
@@ -35,8 +36,6 @@ def dijkstra(graph, src, topo=None):
 def get_intra_length(topo, pre, curr, next):
     if pre == curr or curr == next:
         return 0
-    #for domain in topo.domains:
-    #    print domain, topo.domains[domain].links
     if (pre, curr) in topo.links:
         src_port = topo.links[(pre, curr)][1]
         if (curr, next) in topo.links:
@@ -46,9 +45,9 @@ def get_intra_length(topo, pre, curr, next):
                     in_dist = topo.domains[curr].links[(src_port, dst_port)]
                     return in_dist
                 else:
-                    print "[%s]:%s->%s not found" % (curr,  src_port, dst_port)
+                    LOG.info("[%s]:%s->%s not found" %
+                            (curr,  src_port, dst_port))
                     return OXP_MAX_CAPACITY
-    print "%s -> %s or %s -> %s :no link" % (pre, curr, curr, next)
     return 0
 
 
@@ -119,7 +118,7 @@ def full_dijkstra(graph, src, topo):
                 new_dist = _graph[src][v]['weight'] + _graph[v][d]['weight']
                 new_dist += in_dist
 
-                if new_dist < distance:        # record the min edge.
+                if new_dist < distance:
                     distance = new_dist
                     next = d
                     pre = v
@@ -148,10 +147,7 @@ def get_min_bw_of_inter_links(path, topo, min_bw):
         for i in xrange(_len-2):
             pre, curr, next = path[i], path[i+1], path[i+2]
             intra_bw = get_intra_length(topo, pre, curr, next)
-            if path[0] == 2 and path[-1] == 6:
-                print "2->6 inter links: ", intra_bw
             minimal_band_width = min(intra_bw, min_bw)
-
         return minimal_band_width
     return None
 
@@ -184,7 +180,7 @@ def band_width_compare(graph, paths, best_paths, topo=None):
             for path in paths[src][dst]:
                 min_bw = OXP_MAX_CAPACITY
                 min_bw = get_min_bw_of_intra_links(graph, path, min_bw)
-                if topo is not None:
+                if topo is not None and CONF.oxp_flags == OXP_ADVANCED_BW:
                     min_bw = get_min_bw_of_inter_links(path, topo, min_bw)
                 if min_bw > max_bw_of_paths:
                     max_bw_of_paths = min_bw
@@ -192,11 +188,7 @@ def band_width_compare(graph, paths, best_paths, topo=None):
 
             best_paths[src][dst] = best_path
             capabilities.setdefault(src, {dst: max_bw_of_paths})
-            if src == 2 and dst == 6:
-                print "2->6 max_bw_of_paths: ", max_bw_of_paths
             capabilities[src][dst] = max_bw_of_paths
-    #if CONF.oxp_role == 'super':
-    #    print "capabilities", capabilities, "\nbest_pats: ", best_paths
     return capabilities, best_paths
 
 
@@ -221,8 +213,7 @@ def best_paths_by_bw(graph, src=None, topo=None):
                     break
                 paths[src][dst].append(path)
                 k -= 1
-
-    # find best path by comparing bw.
+    # find best path by comparing bandwidth.
     capabilities, best_paths = band_width_compare(_graph, paths,
                                                   best_paths, topo)
     return capabilities, best_paths, paths

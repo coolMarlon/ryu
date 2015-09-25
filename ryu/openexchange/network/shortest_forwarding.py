@@ -20,7 +20,7 @@ from ryu.topology.api import get_switch, get_link
 from ryu.openexchange.network import network_aware
 from ryu.openexchange.network import network_monitor
 from ryu.openexchange.domain import setting
-from ryu.openexchange.oxproto_common import OXP_SIMPLE_BW
+
 from ryu.openexchange.routing_algorithm import routing_algorithm
 from ryu.openexchange.routing_algorithm.routing_algorithm import get_paths
 from ryu.openexchange.utils import utils

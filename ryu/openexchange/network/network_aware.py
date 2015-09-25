@@ -281,6 +281,10 @@ class Network_Aware(app_manager.RyuApp):
         return
 
     def register_outer_port(self, msg, in_port, src_domain_id, src_vport_no):
+        '''
+            register outer port, and send lldp pkt to super.
+            lldp pkt containing link information.
+        '''
         if src_domain_id != CONF.oxp_domain_id:
             dst_dpid = msg.datapath.id
             dst_port_no = in_port

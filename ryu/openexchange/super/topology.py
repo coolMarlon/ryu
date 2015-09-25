@@ -17,16 +17,13 @@ from ryu.openexchange.event import oxp_event
 from ryu.openexchange.super.oxp_super import Super_Controller
 from ryu.controller.handler import set_ev_handler
 from ryu.controller.handler import set_ev_cls
-from ryu.controller.handler import HANDSHAKE_DISPATCHER, CONFIG_DISPATCHER,\
-    MAIN_DISPATCHER, DEAD_DISPATCHER
-
+from ryu.controller.handler import MAIN_DISPATCHER, DEAD_DISPATCHER
 from ryu.openexchange.database import topology_data
 from ryu.openexchange.database import host_data
 from ryu.openexchange import oxproto_v1_0
 from ryu.openexchange.domain import config
-from ryu.openexchange.oxproto_common import OXP_SIMPLE_HOP, OXP_SIMPLE_BW, \
-    OXP_MAX_CAPACITY
-
+from ryu.openexchange.oxproto_common import OXP_MAX_CAPACITY
+from ryu.openexchange.utils.utils import check_model_is_bw, check_model_is_hop
 from ryu.ofproto import ofproto_common, ofproto_parser
 from ryu.topology import switches
 from ryu import cfg
@@ -85,7 +82,7 @@ class Topology(app_manager.RyuApp):
         self.topo.domains[domain.id].update_link(domain, msg.links)
         self.topo.refresh_inter_links_capabilities()
 
-        if OXP_SIMPLE_BW == CONF.oxp_flags & OXP_SIMPLE_BW:
+        if check_model_is_bw():
             event = oxp_event.EventOXPTrafficStateChange(
                 traffic=None)
             self.oxp_brick.send_event_to_observers(event, MAIN_DISPATCHER)
@@ -111,11 +108,11 @@ class Topology(app_manager.RyuApp):
 
         try:
             src_domain_id, src_vport_no = switches.LLDPPacket.lldp_parse(data)
-            if OXP_SIMPLE_HOP == CONF.oxp_flags & OXP_SIMPLE_HOP:
+            if check_model_is_hop():
                 link = {(domain.id, src_domain_id): (in_port, src_vport_no, 1),
                         (src_domain_id, domain.id): (src_vport_no, in_port, 1)}
                 self.topo.update_link(link)
-            elif OXP_SIMPLE_BW == CONF.oxp_flags & OXP_SIMPLE_BW:
+            elif check_model_is_bw():
                 domain_topo = self.topo.domains[domain.id]
                 src_domain_topo = self.topo.domains[src_domain_id]
 

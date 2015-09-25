@@ -38,7 +38,7 @@ class Translation(app_manager.RyuApp):
 
         self.args = args
         self.network = app_manager.lookup_service_brick("Network_Aware")
-        self.router = app_manager.lookup_service_brick('oxp_basic_handler')
+        self.router = app_manager.lookup_service_brick('network_basic_handler')
         self.abstract = app_manager.lookup_service_brick('oxp_abstract')
         self.domain = None
         self.oxparser = oxproto_v1_0_parser
@@ -60,7 +60,7 @@ class Translation(app_manager.RyuApp):
             if isinstance(arp_pkt, arp.arp):
                 if self.router is None:
                     self.router = app_manager.lookup_service_brick(
-                        'oxp_basic_handler')
+                        'network_basic_handler')
                 self.router.oxp_arp_forwarding(msg, arp_pkt.src_ip,
                                                arp_pkt.dst_ip)
             #save msg.data for flow_mod.

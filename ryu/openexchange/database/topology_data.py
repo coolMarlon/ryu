@@ -11,7 +11,7 @@ esle, it is an intralink.
 """
 from . import data_base
 from ryu.openexchange import oxproto_v1_0
-from ryu.openexchange.oxproto_common import OXP_SIMPLE_HOP, OXP_SIMPLE_BW
+from ryu.openexchange.utils.utils import check_model_is_bw
 from ryu import cfg
 
 CONF = cfg.CONF
@@ -110,7 +110,7 @@ class Super_Topo(data_base.DataBase):
             self.domains.remove(domain)
 
     def refresh_inter_links_capabilities(self):
-        if OXP_SIMPLE_BW == CONF.oxp_flags & OXP_SIMPLE_BW:
+        if check_model_is_bw():
             # reflesh the inter-links' bandwidth.
             for link in self.links:
                 src, dst = link

@@ -10,7 +10,7 @@ from ryu.ofproto import ofproto_v1_3
 from ryu.lib import hub
 from ryu.lib.packet import packet
 from ryu.openexchange.event import oxp_event
-from ryu.openexchange.oxproto_common import OXP_SIMPLE_BW
+from ryu.openexchange.oxproto_common import OXP_BW_MODEL
 from ryu import cfg
 
 CONF = cfg.CONF
@@ -224,7 +224,7 @@ class Network_Monitor(app_manager.RyuApp):
                 self.free_band_width[dpid][port_no] = curr_bw
 
         #raise oxp_event
-        if OXP_SIMPLE_BW == CONF.oxp_flags & OXP_SIMPLE_BW:
+        if OXP_BW_MODEL == CONF.oxp_flags & OXP_BW_MODEL:
             event = oxp_event.EventOXPTrafficStateChange(
                 traffic=self.free_band_width)
             self.oxp_brick = app_manager.lookup_service_brick('oxp_event')

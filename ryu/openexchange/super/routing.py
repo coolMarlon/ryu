@@ -28,10 +28,10 @@ from ryu.openexchange.network import network_monitor
 
 from ryu.openexchange import oxproto_v1_0
 from ryu.openexchange import oxproto_common
-from ryu.openexchange.oxproto_common import OXP_SIMPLE_HOP, OXP_SIMPLE_BW
 from ryu.openexchange.domain import setting
 from ryu.openexchange.routing_algorithm.routing_algorithm import get_paths
 from ryu.openexchange.utils import utils
+from ryu.openexchange.utils.utils import check_model_is_hop, check_model_is_bw
 from ryu.openexchange.event import oxp_event
 from ryu import cfg
 
@@ -69,7 +69,7 @@ class Routing(app_manager.RyuApp):
 
     def get_graph(self, link_list, nodes):
         graph = nx.DiGraph()
-        if OXP_SIMPLE_HOP == CONF.oxp_flags & OXP_SIMPLE_HOP:
+        if check_model_is_hop():
             for src in nodes.keys():
                 for dst in nodes.keys():
                     graph.add_edge(src, dst, weight=float('inf'))
@@ -77,7 +77,7 @@ class Routing(app_manager.RyuApp):
                         graph[src][src]['weight'] = 0
                     elif (src, dst) in link_list:
                         graph[src][dst]['weight'] = link_list[(src, dst)][2]
-        if OXP_SIMPLE_BW == CONF.oxp_flags & OXP_SIMPLE_BW:
+        if check_model_is_bw():
             for src in nodes.keys():
                 for dst in nodes.keys():
                     graph.add_edge(src, dst, weight=float('inf'))
@@ -86,10 +86,7 @@ class Routing(app_manager.RyuApp):
                     elif (src, dst) in link_list:
                         graph[src][dst]['weight'] = 1
                         graph[src][dst]['bandwidth'] = link_list[(src, dst)][2]
-        '''for src in graph:
-            for dst in graph[src]:
-                print src, dst, graph[src][dst]
-        '''
+
         return graph
 
     def get_bw_graph(self, graph, link_list):
