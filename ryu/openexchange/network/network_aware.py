@@ -7,14 +7,12 @@ import networkx as nx
 from operator import attrgetter
 from ryu.base import app_manager
 from ryu.controller import ofp_event
-from ryu.controller import handler
 from ryu.controller.handler import MAIN_DISPATCHER, DEAD_DISPATCHER
 from ryu.controller.handler import CONFIG_DISPATCHER
 from ryu.controller.handler import set_ev_cls
 from ryu.ofproto import ofproto_v1_3, ofproto_v1_0, ofproto_v1_2
 from ryu.ofproto import ofproto_v1_3_parser
 from ryu.lib.packet import packet
-from ryu.lib.packet import ethernet
 from ryu.lib.packet import ipv4
 from ryu.lib.packet import arp
 from ryu.lib.packet import lldp
@@ -26,8 +24,6 @@ from ryu.topology import event, switches
 from ryu.topology.switches import Switches
 from ryu.topology.api import get_switch, get_link
 
-from ryu.openexchange.event.oxp_event import EventOXPVportStatus
-from ryu.openexchange.oxproto_v1_0 import OXPPS_LINK_DOWN, OXPPS_BLOCKED
 from ryu.openexchange.oxproto_v1_0 import OXPPS_LIVE
 from ryu.openexchange.oxproto_v1_0 import OXPP_ACTIVE
 from ryu.openexchange.oxproto_v1_0 import OXPP_INACTIVE

@@ -61,6 +61,8 @@ def _build_packet_out(datapath, buffer_id, src_port, dst_port, data):
 
     msg_data = None
     if buffer_id == datapath.ofproto.OFP_NO_BUFFER:
+        if data is None:
+            return None
         msg_data = data
 
     out = datapath.ofproto_parser.OFPPacketOut(
@@ -71,7 +73,8 @@ def _build_packet_out(datapath, buffer_id, src_port, dst_port, data):
 
 def send_packet_out(datapath, buffer_id, src_port, dst_port, data):
     out = _build_packet_out(datapath, buffer_id, src_port, dst_port, data)
-    datapath.send_msg(out)
+    if out:
+        datapath.send_msg(out)
 
 
 def send_flow_mod(datapath, flow_info, src_port, dst_port):
@@ -151,8 +154,8 @@ def install_flow(datapaths, link2port, access_table, path,
             assert outer_port
             dst_port = outer_port
         send_flow_mod(last_dp, flow_info, src_port, dst_port)
-
-        # Todo: It will bring duplicate packets, and ensure first pkt_in
+        send_barrier_request(last_dp)
+        # Todo:It will bring duplicate packets, but ensure first pkt_in success
         if flag is None:
             send_packet_out(first_dp, buffer_id, in_port, OFPP_TABLE, data)
             send_packet_out(last_dp, buffer_id, src_port, OFPP_TABLE, data)
@@ -247,9 +250,5 @@ def oxp_install_flow(domains, link2port, access_table,
         oxp_send_flow_mod(last_node, dp, flow_info, src_port, dst_port)
     # src and dst on one node
     else:
-        out_port = get_port(flow_info[2], access_table)
-        if out_port is None:
-            assert outer_port
-            out_port = outer_port
-        oxp_send_packet_out(first_node, msg, in_port, out_port, msg)
-        oxp_send_flow_mod(first_node, dp, flow_info, in_port, out_port)
+        LOG.debug("src and dst in same domain.")
+        return

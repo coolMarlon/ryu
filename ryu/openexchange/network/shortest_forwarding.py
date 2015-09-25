@@ -5,29 +5,17 @@ import networkx as nx
 
 from ryu.base import app_manager
 from ryu.controller import ofp_event
-from ryu.controller.handler import MAIN_DISPATCHER, DEAD_DISPATCHER
-from ryu.controller.handler import CONFIG_DISPATCHER
+from ryu.controller.handler import MAIN_DISPATCHER
 from ryu.controller.handler import set_ev_cls
 from ryu.ofproto import ofproto_v1_3
 from ryu.lib.packet import packet
 from ryu.lib.packet import ethernet
 from ryu.lib.packet import ipv4
 from ryu.lib.packet import arp
-
-from ryu.topology import event, switches
-from ryu.topology.api import get_switch, get_link
-
 from ryu.openexchange.network import network_aware
 from ryu.openexchange.network import network_monitor
-from ryu.openexchange.domain import setting
-
-from ryu.openexchange.routing_algorithm import routing_algorithm
-from ryu.openexchange.routing_algorithm.routing_algorithm import get_paths
 from ryu.openexchange.utils import utils
-from ryu.openexchange.event import oxp_event
-from ryu import cfg
-
-CONF = cfg.CONF
+from ryu.ofproto.ofproto_v1_3 import OFPP_TABLE
 
 
 class Shortest_forwarding(app_manager.RyuApp):
@@ -42,7 +30,6 @@ class Shortest_forwarding(app_manager.RyuApp):
         self.name = 'shortest_forwarding'
         self.network_aware = kwargs["Network_Aware"]
         self.network_monitor = kwargs["Network_Monitor"]
-        self.mac_to_port = {}
         self.datapaths = self.network_aware.datapaths
 
         # links   :(src_dpid,dst_dpid)->(src_port,dst_port)
@@ -50,10 +37,8 @@ class Shortest_forwarding(app_manager.RyuApp):
 
         # {sw :[host1_ip,host2_ip,host3_ip,host4_ip]}
         self.access_table = self.network_aware.access_table
-
         self.outer_ports = self.network_aware.outer_ports
         self.abstract = app_manager.lookup_service_brick('oxp_abstract')
-        self.paths = {}
 
     def get_path(self, src, dst):
         if self.abstract is None:
@@ -73,6 +58,7 @@ class Shortest_forwarding(app_manager.RyuApp):
                         datapath, ofproto.OFP_NO_BUFFER,
                         ofproto.OFPP_CONTROLLER, port, msg.data)
                     datapath.send_msg(out)
+        # print "flood pkt IN"
 
     def arp_forwarding(self, msg, src_ip, dst_ip):
         datapath = msg.datapath
@@ -87,6 +73,7 @@ class Shortest_forwarding(app_manager.RyuApp):
                                           ofproto.OFPP_CONTROLLER,
                                           out_port, msg.data)
             datapath.send_msg(out)
+            # print "arp_forwarding IN shortest_forwarding"
         else:
             self.flood(msg)
 
@@ -111,6 +98,9 @@ class Shortest_forwarding(app_manager.RyuApp):
             utils.install_flow(self.datapaths, self.link_to_port,
                                self.access_table, path, flow_info,
                                msg.buffer_id, msg.data)
+            # wait for barrier reply.
+            #utils.send_packet_out(self.datapaths[path[0]], msg.buffer_id,
+            #                      msg.match['in_port'], OFPP_TABLE, msg.data)
         return
 
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
@@ -126,7 +116,6 @@ class Shortest_forwarding(app_manager.RyuApp):
         pkt = packet.Packet(msg.data)
         arp_pkt = pkt.get_protocol(arp.arp)
         ip_pkt = pkt.get_protocol(ipv4.ipv4)
-        eth_type = pkt.get_protocols(ethernet.ethernet)[0].ethertype
 
         if datapath.id in self.outer_ports:
             if in_port in self.outer_ports[datapath.id]:
@@ -139,4 +128,6 @@ class Shortest_forwarding(app_manager.RyuApp):
             self.arp_forwarding(msg, arp_pkt.src_ip, arp_pkt.dst_ip)
 
         if isinstance(ip_pkt, ipv4.ipv4):
-            self.shortest_forwarding(msg, eth_type, ip_pkt.src, ip_pkt.dst)
+            if len(pkt.get_protocols(ethernet.ethernet)):
+                eth_type = pkt.get_protocols(ethernet.ethernet)[0].ethertype
+                self.shortest_forwarding(msg, eth_type, ip_pkt.src, ip_pkt.dst)

@@ -8,30 +8,17 @@ Date                Work
 """
 from ryu.base import app_manager
 from ryu.ofproto import ofproto_v1_3
-from ryu.ofproto import ofproto_v1_0
 from ryu.controller.handler import set_ev_cls
-from ryu.controller.handler import set_ev_handler
-from ryu.lib.ip import ipv4_to_bin
-from ryu.lib.ip import ipv4_to_str
-from ryu.lib.mac import haddr_to_bin
-from ryu.controller.handler import MAIN_DISPATCHER, DEAD_DISPATCHER
+from ryu.controller.handler import MAIN_DISPATCHER
 
 from ryu.openexchange.network import network_aware
 from ryu.openexchange.network import network_monitor
-
-from ryu.openexchange.domain import setting
 from ryu.openexchange.event import oxp_event
 from ryu.openexchange.oxproto_common import OXP_MAX_PERIOD
-from ryu.openexchange import oxproto_v1_0
-from ryu.openexchange import oxproto_v1_0_parser
-from ryu.openexchange.oxproto_v1_0 import OXPP_ACTIVE
-from ryu.openexchange.oxproto_v1_0 import OXPPS_LIVE
 from ryu.openexchange import topology_data
 from ryu.openexchange.utils.controller_id import cap_to_str
 from ryu.openexchange.utils.utils import check_model_is_advanced
 from ryu.openexchange.utils.utils import check_model_is_bw
-
-from ryu.openexchange.routing_algorithm.routing_algorithm import get_paths
 from ryu import cfg
 from ryu.lib import hub
 
@@ -41,7 +28,7 @@ CONF = cfg.CONF
 class TopoReply(app_manager.RyuApp):
     """TopoReply complete periodical topo reply."""
 
-    OFP_VERSIONS = [ofproto_v1_0.OFP_VERSION, ofproto_v1_3.OFP_VERSION]
+    OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
 
     _CONTEXTS = {
         "Network_Aware": network_aware.Network_Aware,

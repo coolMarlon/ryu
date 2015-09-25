@@ -18,7 +18,6 @@ import functools
 from ryu import exception
 from ryu import utils
 from ryu.lib import stringify
-
 from . import oxproto_common
 
 LOG = logging.getLogger('ryu.oxproto.oxproto_parser')

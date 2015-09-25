@@ -10,21 +10,15 @@ Date                Work
 from ryu.base import app_manager
 from ryu.ofproto import ofproto_v1_3
 from ryu.controller.handler import set_ev_cls
-from ryu.controller.handler import set_ev_handler
 from ryu.lib.ip import ipv4_to_bin
 from ryu.lib.mac import haddr_to_bin
 from ryu.controller.handler import MAIN_DISPATCHER, DEAD_DISPATCHER
-from ryu.controller.handler import CONFIG_DISPATCHER
-
-from ryu.topology import event, switches
 
 from ryu.openexchange.event import oxp_event
-from ryu.openexchange import oxproto_v1_0
-from ryu.openexchange import oxproto_v1_0_parser
-
 from ryu.openexchange.network import network_aware
 from ryu.openexchange.network import network_monitor
-
+from ryu.openexchange import oxproto_v1_0
+from ryu.openexchange import oxproto_v1_0_parser
 from ryu.openexchange.oxproto_v1_0 import OXPP_ACTIVE
 from ryu.openexchange.oxproto_v1_0 import OXPPS_LIVE
 from ryu.openexchange.oxproto_common import OXP_MAX_CAPACITY
@@ -33,8 +27,6 @@ from ryu.openexchange import topology_data
 from ryu.openexchange.domain import setting
 
 from ryu.openexchange.routing_algorithm import routing_algorithm
-from ryu.openexchange.routing_algorithm.routing_algorithm import get_paths
-
 from ryu.openexchange.utils.controller_id import cap_to_str
 from ryu.openexchange.utils.utils import check_model_is_advanced
 from ryu.openexchange.utils.utils import check_model_is_bw
@@ -139,8 +131,12 @@ class Abstract(app_manager.RyuApp):
                             if dst_dpid in capabilities[src_dpid]:
                                 cap = capabilities[src_dpid][dst_dpid]
                             else:
+                                self.logger.debug("%s not in capa[%s]" % (
+                                    dst_dpid, src_dpid))
                                 continue
                         else:
+                            self.logger.debug(
+                                "%s not in capabilities" % src_dpid)
                             continue
                         link = self.oxparser.OXPInternallink(
                             src_vport=int(src), dst_vport=int(dst),
@@ -159,8 +155,11 @@ class Abstract(app_manager.RyuApp):
                         if dst_dpid in capabilities[src_dpid]:
                             cap = capabilities[src_dpid][dst_dpid]
                         else:
+                            self.logger.debug("%s not in capa[%s]" % (
+                                dst_dpid, src_dpid))
                             continue
                     else:
+                        self.logger.debug("%s not in capabilities" % src_dpid)
                         continue
                     link = self.oxparser.OXPInternallink(
                         src_vport=int(src), dst_vport=int(dst),
@@ -210,7 +209,7 @@ class Abstract(app_manager.RyuApp):
         if check_model_is_bw():
             self.graph = self.create_bw_graph(graph, self.link_to_port,
                                               self.free_band_width)
-        result = get_paths(graph, function)
+        result = routing_algorithm.get_paths(graph, function)
         if result:
             self.capabilities = result[0]
             self.paths = result[1]

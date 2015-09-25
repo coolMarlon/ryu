@@ -19,9 +19,8 @@ from ryu.openexchange.event import oxp_event
 from ryu.openexchange.super.oxp_super import Super_Controller
 from ryu.controller import controller
 from ryu.controller.handler import set_ev_handler
-from ryu.controller.handler import set_ev_cls
 from ryu.controller.handler import HANDSHAKE_DISPATCHER, CONFIG_DISPATCHER,\
-    MAIN_DISPATCHER, DEAD_DISPATCHER
+    MAIN_DISPATCHER
 
 from ryu.openexchange import oxproto_v1_0
 from ryu.ofproto import ofproto_common, ofproto_parser

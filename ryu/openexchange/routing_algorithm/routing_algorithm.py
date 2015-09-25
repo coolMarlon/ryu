@@ -9,9 +9,9 @@ Date                Work
 2015/9/25           add best_paths_by_bw, using networkx
 """
 import logging
+import copy
 import networkx as nx
 from ryu import cfg
-import copy
 from ryu.openexchange.oxproto_common import OXP_MAX_CAPACITY, OXP_ADVANCED_BW
 
 CONF = cfg.CONF
@@ -45,8 +45,8 @@ def get_intra_length(topo, pre, curr, next):
                     in_dist = topo.domains[curr].links[(src_port, dst_port)]
                     return in_dist
                 else:
-                    LOG.info("[%s]:%s->%s not found" %
-                            (curr,  src_port, dst_port))
+                    LOG.debug("[%s]:%s->%s not found" % (
+                        curr, src_port, dst_port))
                     return OXP_MAX_CAPACITY
     return 0
 
@@ -174,6 +174,7 @@ def band_width_compare(graph, paths, best_paths, topo=None):
             if src == dst:
                 best_paths[src][src] = [src]
                 capabilities.setdefault(src, {src: OXP_MAX_CAPACITY})
+                capabilities[src][src] = OXP_MAX_CAPACITY
                 continue
             max_bw_of_paths = 0
             best_path = paths[src][dst][0]

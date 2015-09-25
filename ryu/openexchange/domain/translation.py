@@ -10,21 +10,13 @@ from ryu.base import app_manager
 from ryu.ofproto import ofproto_v1_3
 from ryu.controller.handler import set_ev_cls
 from ryu.controller.handler import MAIN_DISPATCHER
-
 from ryu.lib.packet import packet
 from ryu.lib.packet import ethernet
 from ryu.lib.packet import ipv4
 from ryu.lib.packet import arp
-
-from ryu.topology import event, switches
 from ryu.openexchange.event import oxp_event
-from ryu.openexchange import oxproto_v1_0
-from ryu.openexchange import oxproto_v1_0_parser
 from ryu.openexchange.utils import utils
-
-from ryu import cfg
-
-CONF = cfg.CONF
+from ryu.ofproto.ofproto_v1_3 import OFPP_TABLE
 
 
 class Translation(app_manager.RyuApp):
@@ -35,16 +27,47 @@ class Translation(app_manager.RyuApp):
     def __init__(self, *args, **kwargs):
         super(Translation, self).__init__(*args, **kwargs)
         self.name = 'oxp_translation'
-
-        self.args = args
         self.network = app_manager.lookup_service_brick("Network_Aware")
-        self.router = app_manager.lookup_service_brick('network_basic_handler')
         self.abstract = app_manager.lookup_service_brick('oxp_abstract')
-        self.domain = None
-        self.oxparser = oxproto_v1_0_parser
-        self.oxproto = oxproto_v1_0
         self.buffer = {}
         self.buffer_id = 0
+        self.outer_hosts = set()
+        self.datapaths = self.network.datapaths
+        self.access_table = self.network.access_table
+
+    def flood(self, msg):
+        datapath = msg.datapath
+        ofproto = datapath.ofproto
+        parser = datapath.ofproto_parser
+
+        for dpid in self.network.access_ports:
+            for port in self.network.access_ports[dpid]:
+                if (dpid, port) not in self.access_table.keys():
+                    datapath = self.datapaths[dpid]
+                    out = utils._build_packet_out(
+                        datapath, ofproto.OFP_NO_BUFFER,
+                        ofproto.OFPP_CONTROLLER, port, msg.data)
+                    datapath.send_msg(out)
+
+    def oxp_arp_forwarding(self, msg, src_ip, dst_ip):
+        datapath = msg.datapath
+        ofproto = datapath.ofproto
+        parser = datapath.ofproto_parser
+        # packet_out from super, record src.
+        self.outer_hosts.add(src_ip)
+
+        # dst in domain
+        result = self.network.get_host_location(dst_ip)
+        if result:
+            #src from other domain, send to host
+            datapath_dst, out_port = result[0], result[1]
+            datapath = self.datapaths[datapath_dst]
+            out = utils._build_packet_out(datapath, ofproto.OFP_NO_BUFFER,
+                                          ofproto.OFPP_CONTROLLER,
+                                          out_port, msg.data)
+            datapath.send_msg(out)
+        else:
+            self.flood(msg)
 
     @set_ev_cls(oxp_event.EventOXPSBPPacketOut, MAIN_DISPATCHER)
     def sbp_packet_out_handler(self, ev):
@@ -58,11 +81,7 @@ class Translation(app_manager.RyuApp):
 
         if msg.actions[0].port == ofproto_v1_3.OFPP_LOCAL:
             if isinstance(arp_pkt, arp.arp):
-                if self.router is None:
-                    self.router = app_manager.lookup_service_brick(
-                        'network_basic_handler')
-                self.router.oxp_arp_forwarding(msg, arp_pkt.src_ip,
-                                               arp_pkt.dst_ip)
+                self.oxp_arp_forwarding(msg, arp_pkt.src_ip, arp_pkt.dst_ip)
             #save msg.data for flow_mod.
             elif isinstance(ip_pkt, ipv4.ipv4):
                 self.buffer[(eth_type, ip_pkt.src, ip_pkt.dst)] = msg.data
@@ -78,6 +97,7 @@ class Translation(app_manager.RyuApp):
             #save msg.data for flow_mod.
             if isinstance(ip_pkt, ipv4.ipv4):
                 self.buffer[(eth_type, ip_pkt.src, ip_pkt.dst)] = msg.data
+            # if super just send a pkt_out, domain need to send it.
             datapath.send_msg(out)
 
     def shortest_forwarding(self, msg, eth_type, ip_src, ip_dst):
@@ -114,11 +134,14 @@ class Translation(app_manager.RyuApp):
                     del self.buffer[(eth_type, ip_src, ip_dst)]
                 else:
                     flag = True
-                utils.install_flow(self.network.datapaths,
+                utils.install_flow(self.datapaths,
                                    self.network.link_to_port,
                                    self.network.access_table, path, flow_info,
                                    ofproto.OFP_NO_BUFFER, data,
                                    outer_port=outer_port, flag=flag)
+                # waiting for barrier reply logic.
+                #utils.send_packet_out(self.datapaths[path[0]], msg.buffer_id,
+                #                      msg.match['in_port'], OFPP_TABLE, data)
         else:
             self.network.get_topology(None)
 

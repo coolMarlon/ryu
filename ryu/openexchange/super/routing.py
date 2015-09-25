@@ -5,45 +5,30 @@ import networkx as nx
 
 from operator import attrgetter
 from ryu.base import app_manager
-from ryu.controller import ofp_event
-from ryu.controller import controller
+from ryu.base.app_manager import lookup_service_brick
 from ryu.controller.handler import MAIN_DISPATCHER, DEAD_DISPATCHER
-from ryu.controller.handler import CONFIG_DISPATCHER
 from ryu.controller.handler import set_ev_cls
-from ryu.ofproto import ofproto_v1_0
-from ryu.ofproto import ofproto_v1_0_parser
-
 from ryu.ofproto import ofproto_v1_3
-from ryu.ofproto import ofproto_v1_3_parser
 from ryu.lib.packet import packet
 from ryu.lib.packet import ethernet
 from ryu.lib.packet import ipv4
 from ryu.lib.packet import arp
 
-from ryu.topology import event, switches
-from ryu.topology.api import get_switch, get_link
-
 from ryu.openexchange.network import network_aware
 from ryu.openexchange.network import network_monitor
-
-from ryu.openexchange import oxproto_v1_0
-from ryu.openexchange import oxproto_common
 from ryu.openexchange.domain import setting
 from ryu.openexchange.routing_algorithm.routing_algorithm import get_paths
 from ryu.openexchange.utils import utils
 from ryu.openexchange.utils.utils import check_model_is_hop, check_model_is_bw
 from ryu.openexchange.event import oxp_event
-from ryu import cfg
-
-CONF = cfg.CONF
 
 
 class Routing(app_manager.RyuApp):
     def __init__(self, *args, **kwargs):
         super(Routing, self).__init__(*args, **kwargs)
-        self.module_topo = app_manager.lookup_service_brick('oxp_topology')
-        self.topology = self.module_topo.topo
-        self.location = self.module_topo.location
+        self.module_topo = None
+        self.topology = None
+        self.location = None
         self.domains = {}
         self.graph = nx.DiGraph()
         self.paths = {}
@@ -57,6 +42,10 @@ class Routing(app_manager.RyuApp):
             if domain.id not in self.domains.keys():
                 self.domains.setdefault(domain.id, None)
                 self.domains[domain.id] = domain
+            if self.module_topo is None:
+                self.module_topo = lookup_service_brick('oxp_topology')
+                self.topology = self.module_topo.topo
+                self.location = self.module_topo.location
         if ev.state == DEAD_DISPATCHER:
             del self.domains[domain.id]
 
@@ -123,6 +112,7 @@ class Routing(app_manager.RyuApp):
         self.get_path(self.graph, None, ev.msg.domain.flags)
 
     def arp_forwarding(self, domain, msg, arp_dst_ip):
+        src_domain = domain
         datapath = msg.datapath
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
@@ -142,6 +132,8 @@ class Routing(app_manager.RyuApp):
         else:
             # access info is not existed. send to all UNknow access port
             for domain in self.domains.values():
+                if domain == src_domain:
+                    continue
                 out = utils._build_packet_out(
                     datapath, ofproto.OFP_NO_BUFFER,
                     ofproto.OFPP_CONTROLLER, ofproto.OFPP_LOCAL, msg.data)
@@ -167,6 +159,16 @@ class Routing(app_manager.RyuApp):
                 flow_info = (eth_type, ip_src, ip_dst, msg.match['in_port'])
                 utils.oxp_install_flow(self.domains, self.topology.links,
                                        access_table, path, flow_info, msg)
+                '''
+                if len(path) > 1:
+                    port_pair = utils.get_link2port(self.topology.links,
+                                                    path[0], path[1])
+                    if port_pair is None:
+                        return
+                    out_port = port_pair[0]
+                    utils.oxp_send_packet_out(self.domains[path[0]], msg,
+                                              msg.match['in_port'], out_port)
+                '''
         else:
             # Reflesh the topology database.
             self.get_topology(None)

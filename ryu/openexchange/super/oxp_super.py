@@ -13,11 +13,9 @@ from ryu import cfg
 import logging
 import ssl
 import random
-
+import eventlet
 from ryu.lib import hub
 from ryu.lib.hub import StreamServer
-import eventlet
-
 from ryu.controller import handler
 from ryu.openexchange import oxproto
 from ryu.openexchange import oxproto_parser
