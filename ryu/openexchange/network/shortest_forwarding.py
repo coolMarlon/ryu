@@ -13,23 +13,18 @@ from ryu.lib.packet import ethernet
 from ryu.lib.packet import ipv4
 from ryu.lib.packet import arp
 from ryu.openexchange.network import network_aware
-from ryu.openexchange.network import network_monitor
 from ryu.openexchange.utils import utils
 from ryu.ofproto.ofproto_v1_3 import OFPP_TABLE
 
 
 class Shortest_forwarding(app_manager.RyuApp):
     OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
-    _CONTEXTS = {
-        "Network_Aware": network_aware.Network_Aware,
-        "Network_Monitor": network_monitor.Network_Monitor,
-    }
+    _CONTEXTS = {"Network_Aware": network_aware.Network_Aware}
 
     def __init__(self, *args, **kwargs):
         super(Shortest_forwarding, self).__init__(*args, **kwargs)
         self.name = 'shortest_forwarding'
         self.network_aware = kwargs["Network_Aware"]
-        self.network_monitor = kwargs["Network_Monitor"]
         self.datapaths = self.network_aware.datapaths
 
         # links   :(src_dpid,dst_dpid)->(src_port,dst_port)

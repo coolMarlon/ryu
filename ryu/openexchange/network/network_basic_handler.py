@@ -15,21 +15,16 @@ from ryu.lib.packet import ipv4
 from ryu.lib.packet import arp
 
 from ryu.openexchange.network import network_aware
-from ryu.openexchange.network import network_monitor
 
 
-class OXP_Basic_Handler(app_manager.RyuApp):
+class Network_Basic_Handler(app_manager.RyuApp):
     OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
-    _CONTEXTS = {
-        "Network_Aware": network_aware.Network_Aware,
-        "Network_Monitor": network_monitor.Network_Monitor,
-    }
+    _CONTEXTS = {"Network_Aware": network_aware.Network_Aware}
 
     def __init__(self, *args, **kwargs):
-        super(OXP_Basic_Handler, self).__init__(*args, **kwargs)
+        super(Network_Basic_Handler, self).__init__(*args, **kwargs)
         self.name = 'network_basic_handler'
         self.network_aware = kwargs["Network_Aware"]
-        self.network_monitor = kwargs["Network_Monitor"]
         self.outer_ports = self.network_aware.outer_ports
         self.translation = lookup_service_brick('oxp_translation')
 

@@ -54,6 +54,7 @@ class Abstract(app_manager.RyuApp):
         self.monitor = kwargs["Network_Monitor"]
         self.link_to_port = self.network.link_to_port
         self.graph = self.network.graph
+        self.access_table = self.network.access_table
 
         self.free_band_width = self.monitor.free_band_width
         self.domain = app_manager.lookup_service_brick('oxp_event').domain
@@ -98,7 +99,7 @@ class Abstract(app_manager.RyuApp):
     @set_ev_cls(oxp_event.EventOXPHostRequest, MAIN_DISPATCHER)
     def host_request_handler(self, ev):
         domain = ev.msg.domain
-        host_info = self.network.access_table
+        host_info = self.access_table
         hosts = []
         for key in host_info:
             h = self.oxparser.OXPHost(ip=ipv4_to_bin(host_info[key][0]),

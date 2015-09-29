@@ -12,7 +12,6 @@ from ryu.controller.handler import set_ev_cls
 from ryu.controller.handler import MAIN_DISPATCHER
 
 from ryu.openexchange.network import network_aware
-from ryu.openexchange.network import network_monitor
 from ryu.openexchange.event import oxp_event
 from ryu.openexchange.oxproto_common import OXP_MAX_PERIOD
 from ryu.openexchange import topology_data
@@ -30,18 +29,13 @@ class TopoReply(app_manager.RyuApp):
 
     OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
 
-    _CONTEXTS = {
-        "Network_Aware": network_aware.Network_Aware,
-        "Network_Monitor": network_monitor.Network_Monitor,
-    }
+    _CONTEXTS = {"Network_Aware": network_aware.Network_Aware}
 
     def __init__(self, *args, **kwargs):
         super(TopoReply, self).__init__(*args, **kwargs)
         self.name = 'oxp_toporeply'
         self.args = args
         self.network = kwargs["Network_Aware"]
-        self.monitor = kwargs["Network_Monitor"]
-        self.free_band_width = self.monitor.free_band_width
         self.domain = None
         self.oxparser = None
         self.topology = topology_data.Domain()

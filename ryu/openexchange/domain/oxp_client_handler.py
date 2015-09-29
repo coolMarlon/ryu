@@ -10,9 +10,7 @@ Basic OpenExchange handling including negotiation.
 
 import itertools
 import logging
-
-import ryu.base.app_manager
-
+from ryu.base import app_manager
 from ryu.lib import hub
 from ryu import utils
 
@@ -51,7 +49,7 @@ CONF = cfg.CONF
 # back Echo Reply message.
 
 
-class OXP_Client_Handler(ryu.base.app_manager.RyuApp):
+class OXP_Client_Handler(app_manager.RyuApp):
     OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
 
     def __init__(self, *args, **kwargs):
@@ -60,8 +58,7 @@ class OXP_Client_Handler(ryu.base.app_manager.RyuApp):
         self.domain = None
         self.oxproto = oxproto_v1_0
         self.oxparser = oxproto_v1_0_parser
-        self.network_aware = ryu.base.app_manager.lookup_service_brick(
-            "Network_Aware")
+        self.network_aware = app_manager.lookup_service_brick("Network_Aware")
         self.fake_datapath = None
 
     def start(self):

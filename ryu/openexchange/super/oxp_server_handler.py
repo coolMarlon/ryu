@@ -3,7 +3,6 @@ This file define the handler of OXP.
 Author:www.muzixing.com
 """
 
-
 """
 Basic OpenExchange handling including negotiation.
 """
