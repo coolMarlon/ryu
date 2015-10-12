@@ -32,6 +32,7 @@ class Shortest_forwarding(app_manager.RyuApp):
 
         # {sw :[host1_ip,host2_ip,host3_ip,host4_ip]}
         self.access_table = self.network_aware.access_table
+        self.access_ports = self.network_aware.access_ports
         self.outer_ports = self.network_aware.outer_ports
         self.abstract = app_manager.lookup_service_brick('oxp_abstract')
 
@@ -53,7 +54,6 @@ class Shortest_forwarding(app_manager.RyuApp):
                         datapath, ofproto.OFP_NO_BUFFER,
                         ofproto.OFPP_CONTROLLER, port, msg.data)
                     datapath.send_msg(out)
-        # print "flood pkt IN"
 
     def arp_forwarding(self, msg, src_ip, dst_ip):
         datapath = msg.datapath
@@ -68,34 +68,44 @@ class Shortest_forwarding(app_manager.RyuApp):
                                           ofproto.OFPP_CONTROLLER,
                                           out_port, msg.data)
             datapath.send_msg(out)
-            # print "arp_forwarding IN shortest_forwarding"
         else:
             self.flood(msg)
+
+    def get_sw(self, dpid, in_port, src, dst):
+        src_sw = dpid
+        dst_sw = None
+        
+        src_location = self.network_aware.get_host_location(src)
+        if in_port in self.access_ports[dpid]:
+            if (dpid,  in_port) == src_location:
+                src_sw = src_location[0]
+            else:
+                return None
+
+        dst_location = self.network_aware.get_host_location(dst)
+        if dst_location:
+            dst_sw = dst_location[0]
+
+        return src_sw, dst_sw
 
     def shortest_forwarding(self, msg, eth_type, ip_src, ip_dst):
         datapath = msg.datapath
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
-        src_sw = dst_sw = None
+        in_port = msg.match['in_port']
 
-        src_location = self.network_aware.get_host_location(ip_src)
-        dst_location = self.network_aware.get_host_location(ip_dst)
-        if src_location:
-            src_sw = src_location[0]
-        else:
-            return
-        if dst_location:
-            dst_sw = dst_location[0]
-
-        if dst_sw:
-            path = self.get_path(src_sw, dst_sw)
-            flow_info = (eth_type, ip_src, ip_dst, msg.match['in_port'])
-            utils.install_flow(self.datapaths, self.link_to_port,
-                               self.access_table, path, flow_info,
-                               msg.buffer_id, msg.data)
-            # wait for barrier reply.
-            #utils.send_packet_out(self.datapaths[path[0]], msg.buffer_id,
-            #                      msg.match['in_port'], OFPP_TABLE, msg.data)
+        result = self.get_sw(datapath.id, in_port, ip_src, ip_dst)
+        if result:
+            src_sw, dst_sw = result[0], result[1]
+            if dst_sw:
+                path = self.get_path(src_sw, dst_sw)
+                flow_info = (eth_type, ip_src, ip_dst, in_port)
+                utils.install_flow(self.datapaths, self.link_to_port,
+                                   self.access_table, path, flow_info,
+                                   msg.buffer_id, msg.data)
+                # wait for barrier reply.
+                #utils.send_packet_out(self.datapaths[path[0]], msg.buffer_id,
+                #                      msg.match['in_port'], OFPP_TABLE, msg.data)
         return
 
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
@@ -107,7 +117,6 @@ class Shortest_forwarding(app_manager.RyuApp):
         msg = ev.msg
         datapath = msg.datapath
         in_port = msg.match['in_port']
-
         pkt = packet.Packet(msg.data)
         arp_pkt = pkt.get_protocol(arp.arp)
         ip_pkt = pkt.get_protocol(ipv4.ipv4)

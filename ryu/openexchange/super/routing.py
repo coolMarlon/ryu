@@ -159,16 +159,6 @@ class Routing(app_manager.RyuApp):
                 flow_info = (eth_type, ip_src, ip_dst, msg.match['in_port'])
                 utils.oxp_install_flow(self.domains, self.topology.links,
                                        access_table, path, flow_info, msg)
-                '''
-                if len(path) > 1:
-                    port_pair = utils.get_link2port(self.topology.links,
-                                                    path[0], path[1])
-                    if port_pair is None:
-                        return
-                    out_port = port_pair[0]
-                    utils.oxp_send_packet_out(self.domains[path[0]], msg,
-                                              msg.match['in_port'], out_port)
-                '''
         else:
             # Reflesh the topology database.
             self.get_topology(None)

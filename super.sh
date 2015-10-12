@@ -1,1 +1,1 @@
-ryu-manager ryu/app/simple_switch.py --oxp-role=super --oxp-listen-host=127.0.0.1 --observe-links
+ryu-manager  ryu.openexchange.super.routing --oxp-role=super --oxp-listen-host=127.0.0.1 --observe-links

@@ -57,7 +57,8 @@ def add_flow(dp, p, match, actions, idle_timeout=0, hard_timeout=0):
 
 def _build_packet_out(datapath, buffer_id, src_port, dst_port, data):
     actions = []
-    actions.append(datapath.ofproto_parser.OFPActionOutput(dst_port))
+    if dst_port:
+        actions.append(datapath.ofproto_parser.OFPActionOutput(dst_port))
 
     msg_data = None
     if buffer_id == datapath.ofproto.OFP_NO_BUFFER:
@@ -87,7 +88,6 @@ def send_flow_mod(datapath, flow_info, src_port, dst_port):
         ipv4_src=flow_info[1], ipv4_dst=flow_info[2])
 
     add_flow(datapath, 1, match, actions, idle_timeout=15, hard_timeout=60)
-    send_barrier_request(datapath)
 
 
 def get_link2port(link_to_port, src_dpid, dst_dpid):
@@ -122,15 +122,13 @@ def install_flow(datapaths, link2port, access_table, path,
         flow_info=(eth_type, src_ip, dst_ip, in_port)
         outer_port: port face to other domain.
     '''
-    if path is None:
-        LOG.info("Path is None.")
-        return
-    if len(path) == 0:
-        LOG.info("Path is Empty.")
+    if path is None or len(path) == 0:
+        LOG.info("PATH ERROR")
         return
     in_port = flow_info[3]
     first_dp = datapaths[path[0]]
     out_port = first_dp.ofproto.OFPP_LOCAL
+    reverse_flow_info = (flow_info[0], flow_info[2], flow_info[1])
     # inter_link
     if len(path) > 2:
         for i in xrange(1, len(path) - 1):
@@ -140,12 +138,8 @@ def install_flow(datapaths, link2port, access_table, path,
                 src_port, dst_port = port[1], port_next[0]
                 datapath = datapaths[path[i]]
                 send_flow_mod(datapath, flow_info, src_port, dst_port)
+                send_flow_mod(datapath, reverse_flow_info, dst_port, src_port)
     if len(path) > 1:
-        # the  first flow entry
-        port_pair = get_link2port(link2port, path[0], path[1])
-        out_port = port_pair[0]
-        send_flow_mod(first_dp, flow_info, in_port, out_port)
-
         # the last flow entry: tor -> host
         last_dp = datapaths[path[-1]]
         src_port = get_link2port(link2port, path[-2], path[-1])[1]
@@ -154,27 +148,31 @@ def install_flow(datapaths, link2port, access_table, path,
             assert outer_port
             dst_port = outer_port
         send_flow_mod(last_dp, flow_info, src_port, dst_port)
+        send_flow_mod(last_dp, reverse_flow_info, dst_port, src_port)
+
+        # the first flow entry
+        port_pair = get_link2port(link2port, path[0], path[1])
+        out_port = port_pair[0]
+        send_flow_mod(first_dp, flow_info, in_port, out_port)
+        send_flow_mod(first_dp, reverse_flow_info, out_port, in_port)
         send_barrier_request(last_dp)
-        # Todo:It will bring duplicate packets, but ensure first pkt_in success
         if flag is None:
-            send_packet_out(first_dp, buffer_id, in_port, OFPP_TABLE, data)
-            send_packet_out(last_dp, buffer_id, src_port, OFPP_TABLE, data)
-    # src and dst on one datapath
+            send_packet_out(first_dp, buffer_id, in_port, out_port, data)
+            send_packet_out(last_dp, buffer_id, src_port, dst_port, data)
+    # src and dst on the same datapath
     else:
         out_port = get_port(flow_info[2], access_table)
         if out_port is None:
             assert outer_port
             out_port = outer_port
         send_flow_mod(first_dp, flow_info, in_port, out_port)
-        send_barrier_request(first_dp)
+        send_flow_mod(first_dp, reverse_flow_info, out_port, in_port)
         if flag is None:
-            send_packet_out(first_dp, buffer_id, in_port, OFPP_TABLE, data)
+            send_packet_out(first_dp, buffer_id, in_port, out_port, data)
 
 '''
     Define oxp useful and easy functions below.
-
 '''
-
 
 def oxp_send_packet_out(domain, msg, src_port, dst_port):
     datapath = msg.datapath
@@ -228,12 +226,12 @@ def oxp_install_flow(domains, link2port, access_table,
             else:
                 return
     if len(path) > 1:
-        # the  first flow entry
+        # the first flow entry
         port_pair = get_link2port(link2port, path[0], path[1])
         if port_pair is None:
             return
         out_port = port_pair[0]
-        oxp_send_packet_out(first_node, msg, in_port, out_port)
+        # oxp_send_packet_out(first_node, msg, in_port, out_port)
         oxp_send_flow_mod(first_node, dp, flow_info, in_port, out_port)
 
         # the last flow entry
@@ -248,7 +246,6 @@ def oxp_install_flow(domains, link2port, access_table,
             dst_port = outer_port
         oxp_send_packet_out(last_node, msg, src_port, dst_port)
         oxp_send_flow_mod(last_node, dp, flow_info, src_port, dst_port)
-    # src and dst on one node
     else:
         LOG.debug("src and dst in same domain.")
         return

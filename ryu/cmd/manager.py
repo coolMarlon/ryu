@@ -75,9 +75,9 @@ def main(args=None, prog=None):
         app_lists = ['ryu.controller.ofp_handler']
 
     if CONF.oxp_role == 'super':
-        start_lists = ['ryu.openexchange.super.oxp_server_handler',
-                       'ryu.openexchange.super.topology',
-                       'ryu.openexchange.super.routing']
+        start_lists = ['ryu.controller.ofp_handler',
+                       'ryu.openexchange.super.oxp_server_handler',
+                       'ryu.openexchange.super.topology']
         start_lists.extend(app_lists)
         app_lists = start_lists
     elif CONF.oxp_role == 'domain':

@@ -15,6 +15,8 @@ from ryu.lib.packet import ipv4
 from ryu.lib.packet import arp
 
 from ryu.openexchange.network import network_aware
+from ryu.openexchange.utils import utils
+from ryu.ofproto.ofproto_v1_3 import OFPP_TABLE
 
 
 class Network_Basic_Handler(app_manager.RyuApp):
@@ -52,7 +54,11 @@ class Network_Basic_Handler(app_manager.RyuApp):
         if src_location:
             src_sw = src_location[0]
         else:
-            # src doesn't belong to domain, ignore it.
+            # src doesn't belong to domain
+            # send it back to datapath's flow table.
+            print "send back to datapath: ", ip_src
+            utils.send_packet_out(datapath, msg.buffer_id, 
+                msg.match['in_port'], OFPP_TABLE, msg.data)
             return
         if dst_location:
             dst_sw = dst_location[0]
@@ -82,8 +88,6 @@ class Network_Basic_Handler(app_manager.RyuApp):
                 # The packet from other domain, MUST ignore it!!
                 return
 
-        # We implemente oxp in a big network,
-        # so we shouldn't care about the subnet and router.
         if isinstance(arp_pkt, arp.arp):
             self.outer_arp_handler(msg, arp_pkt.src_ip, arp_pkt.dst_ip)
 
