@@ -23,7 +23,7 @@ from ryu.openexchange.oxproto_v1_0 import OXPP_ACTIVE
 from ryu.openexchange.oxproto_v1_0 import OXPPS_LIVE
 from ryu.openexchange.oxproto_common import OXP_MAX_CAPACITY
 
-from ryu.openexchange import topology_data
+from ryu.openexchange.database import topology_data
 from ryu.openexchange.domain import setting
 
 from ryu.openexchange.routing_algorithm import routing_algorithm

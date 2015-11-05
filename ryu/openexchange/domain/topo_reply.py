@@ -14,7 +14,7 @@ from ryu.controller.handler import MAIN_DISPATCHER
 from ryu.openexchange.network import network_aware
 from ryu.openexchange.event import oxp_event
 from ryu.openexchange.oxproto_common import OXP_MAX_PERIOD
-from ryu.openexchange import topology_data
+from ryu.openexchange.database import topology_data
 from ryu.openexchange.utils.controller_id import cap_to_str
 from ryu.openexchange.utils.utils import check_model_is_advanced
 from ryu.openexchange.utils.utils import check_model_is_bw
