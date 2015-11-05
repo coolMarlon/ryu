@@ -17,7 +17,7 @@ import eventlet
 from ryu.lib import hub
 from ryu.lib.hub import StreamServer
 from ryu.controller import handler
-from ryu.openexchange import oxproto
+
 from ryu.openexchange import oxproto_parser
 from ryu.openexchange import oxproto_common
 from ryu.openexchange import oxproto_protocol
