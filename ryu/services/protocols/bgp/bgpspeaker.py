@@ -18,7 +18,6 @@
 
 import netaddr
 from ryu.lib import hub
-from ryu.services.protocols.bgp.operator import ssh
 
 from ryu.services.protocols.bgp.core_manager import CORE_MANAGER
 from ryu.services.protocols.bgp.signals.emit import BgpSignalBus
@@ -47,20 +46,29 @@ from ryu.services.protocols.bgp.rtconf.base import CAP_MBGP_IPV4
 from ryu.services.protocols.bgp.rtconf.base import CAP_MBGP_IPV6
 from ryu.services.protocols.bgp.rtconf.base import CAP_MBGP_VPNV4
 from ryu.services.protocols.bgp.rtconf.base import CAP_MBGP_VPNV6
+from ryu.services.protocols.bgp.rtconf.base import CAP_ENHANCED_REFRESH
 from ryu.services.protocols.bgp.rtconf.base import MULTI_EXIT_DISC
 from ryu.services.protocols.bgp.rtconf.base import SITE_OF_ORIGINS
 from ryu.services.protocols.bgp.rtconf.neighbors import DEFAULT_CAP_MBGP_IPV4
 from ryu.services.protocols.bgp.rtconf.neighbors import DEFAULT_CAP_MBGP_VPNV4
 from ryu.services.protocols.bgp.rtconf.neighbors import DEFAULT_CAP_MBGP_VPNV6
+from ryu.services.protocols.bgp.rtconf.neighbors \
+    import DEFAULT_CAP_ENHANCED_REFRESH
+from ryu.services.protocols.bgp.rtconf.neighbors import DEFAULT_CONNECT_MODE
 from ryu.services.protocols.bgp.rtconf.neighbors import PEER_NEXT_HOP
 from ryu.services.protocols.bgp.rtconf.neighbors import PASSWORD
 from ryu.services.protocols.bgp.rtconf.neighbors import IN_FILTER
 from ryu.services.protocols.bgp.rtconf.neighbors import OUT_FILTER
 from ryu.services.protocols.bgp.rtconf.neighbors import IS_ROUTE_SERVER_CLIENT
 from ryu.services.protocols.bgp.rtconf.neighbors import IS_NEXT_HOP_SELF
+from ryu.services.protocols.bgp.rtconf.neighbors import CONNECT_MODE
 from ryu.services.protocols.bgp.rtconf.neighbors import LOCAL_ADDRESS
 from ryu.services.protocols.bgp.rtconf.neighbors import LOCAL_PORT
 from ryu.services.protocols.bgp.info_base.base import Filter
+from ryu.services.protocols.bgp.info_base.ipv4 import Ipv4Path
+from ryu.services.protocols.bgp.info_base.ipv6 import Ipv6Path
+from ryu.services.protocols.bgp.info_base.vpnv4 import Vpnv4Path
+from ryu.services.protocols.bgp.info_base.vpnv6 import Vpnv6Path
 
 
 NEIGHBOR_CONF_MED = 'multi_exit_disc'
@@ -80,16 +88,19 @@ class EventPrefix(object):
     route_dist       None in the case of ipv4 or ipv6 family
     prefix           A prefix was changed
     nexthop          The nexthop of the changed prefix
+    label            mpls label for vpnv4 prefix
     is_withdraw      True if this prefix has gone otherwise False
     ================ ======================================================
 
     """
 
-    def __init__(self, remote_as, route_dist, prefix, nexthop, is_withdraw):
+    def __init__(self, remote_as, route_dist, prefix, nexthop, label,
+                 is_withdraw):
         self.remote_as = remote_as
         self.route_dist = route_dist
         self.prefix = prefix
         self.nexthop = nexthop
+        self.label = label
         self.is_withdraw = is_withdraw
 
 
@@ -99,6 +110,8 @@ class BGPSpeaker(object):
                  refresh_stalepath_time=DEFAULT_REFRESH_STALEPATH_TIME,
                  refresh_max_eor_time=DEFAULT_REFRESH_MAX_EOR_TIME,
                  best_path_change_handler=None,
+                 peer_down_handler=None,
+                 peer_up_handler=None,
                  ssh_console=False,
                  label_range=DEFAULT_LABEL_RANGE):
         """Create a new BGPSpeaker object with as_number and router_id to
@@ -128,6 +141,12 @@ class BGPSpeaker(object):
         peer down. The handler is supposed to take one argument, the
         instance of an EventPrefix class instance.
 
+        ``peer_down_handler``, if specified, is called when BGP peering
+        session goes down.
+
+        ``peer_up_handler``, if specified, is called when BGP peering
+        session goes up.
+
         """
         super(BGPSpeaker, self).__init__()
 
@@ -141,17 +160,47 @@ class BGPSpeaker(object):
         self._core_start(settings)
         self._init_signal_listeners()
         self._best_path_change_handler = best_path_change_handler
+        self._peer_down_handler = peer_down_handler
+        self._peer_up_handler = peer_up_handler
         if ssh_console:
+            from ryu.services.protocols.bgp.operator import ssh
+
             hub.spawn(ssh.SSH_CLI_CONTROLLER.start)
 
+    def _notify_peer_down(self, peer):
+        remote_ip = peer.protocol.recv_open_msg.bgp_identifier
+        remote_as = peer.protocol.recv_open_msg.my_as
+        if self._peer_down_handler:
+            self._peer_down_handler(remote_ip, remote_as)
+
+    def _notify_peer_up(self, peer):
+        remote_ip = peer.protocol.recv_open_msg.bgp_identifier
+        remote_as = peer.protocol.recv_open_msg.my_as
+        if self._peer_up_handler:
+            self._peer_up_handler(remote_ip, remote_as)
+
     def _notify_best_path_changed(self, path, is_withdraw):
-        if not path.source:
-            # ours
+        if path.source:
+            nexthop = path.nexthop
+            is_withdraw = is_withdraw
+            remote_as = path.source.remote_as
+        else:
             return
-        ev = EventPrefix(remote_as=path.source.remote_as,
-                         route_dist=None,
-                         prefix=path.nlri.addr + '/' + str(path.nlri.length),
-                         nexthop=path.nexthop, is_withdraw=is_withdraw)
+
+        if isinstance(path, Ipv4Path) or isinstance(path, Ipv6Path):
+            prefix = path.nlri.addr + '/' + str(path.nlri.length)
+            route_dist = None
+            label = None
+        elif isinstance(path, Vpnv4Path) or isinstance(path, Vpnv6Path):
+            prefix = path.nlri.prefix
+            route_dist = path.nlri.route_dist
+            label = path.nlri.label_list
+        else:
+            return
+
+        ev = EventPrefix(remote_as, route_dist, prefix, nexthop, label,
+                         is_withdraw)
+
         if self._best_path_change_handler:
             self._best_path_change_handler(ev)
 
@@ -159,8 +208,18 @@ class BGPSpeaker(object):
         CORE_MANAGER.get_core_service()._signal_bus.register_listener(
             BgpSignalBus.BGP_BEST_PATH_CHANGED,
             lambda _, info:
-                self._notify_best_path_changed(info['path'],
-                                               info['is_withdraw'])
+            self._notify_best_path_changed(info['path'],
+                                           info['is_withdraw'])
+        )
+        CORE_MANAGER.get_core_service()._signal_bus.register_listener(
+            BgpSignalBus.BGP_ADJ_DOWN,
+            lambda _, info:
+            self._notify_peer_down(info['peer'])
+        )
+        CORE_MANAGER.get_core_service()._signal_bus.register_listener(
+            BgpSignalBus.BGP_ADJ_UP,
+            lambda _, info:
+            self._notify_peer_up(info['peer'])
         )
 
     def _core_start(self, settings):
@@ -181,10 +240,11 @@ class BGPSpeaker(object):
                      enable_ipv4=DEFAULT_CAP_MBGP_IPV4,
                      enable_vpnv4=DEFAULT_CAP_MBGP_VPNV4,
                      enable_vpnv6=DEFAULT_CAP_MBGP_VPNV6,
+                     enable_enhanced_refresh=DEFAULT_CAP_ENHANCED_REFRESH,
                      next_hop=None, password=None, multi_exit_disc=None,
                      site_of_origins=None, is_route_server_client=False,
                      is_next_hop_self=False, local_address=None,
-                     local_port=None):
+                     local_port=None, connect_mode=DEFAULT_CONNECT_MODE):
         """ This method registers a new neighbor. The BGP speaker tries to
         establish a bgp session with the peer (accepts a connection
         from the peer and also tries to connect to it).
@@ -224,6 +284,12 @@ class BGPSpeaker(object):
         ``is_next_hop_self`` specifies whether the BGP speaker announces
         its own ip address to iBGP neighbor or not as path's next_hop address.
 
+        ``connect_mode`` specifies how to connect to this neighbor.
+        CONNECT_MODE_ACTIVE tries to connect from us.
+        CONNECT_MODE_PASSIVE just listens and wait for the connection.
+        CONNECT_MODE_BOTH use both methods.
+        The default is CONNECT_MODE_BOTH
+
         ``local_address`` specifies Loopback interface address for
         iBGP peering.
 
@@ -237,6 +303,8 @@ class BGPSpeaker(object):
         bgp_neighbor[PASSWORD] = password
         bgp_neighbor[IS_ROUTE_SERVER_CLIENT] = is_route_server_client
         bgp_neighbor[IS_NEXT_HOP_SELF] = is_next_hop_self
+        bgp_neighbor[CONNECT_MODE] = connect_mode
+        bgp_neighbor[CAP_ENHANCED_REFRESH] = enable_enhanced_refresh
         # v6 advertizement is available with only v6 peering
         if netaddr.valid_ipv4(address):
             bgp_neighbor[CAP_MBGP_IPV4] = enable_ipv4
@@ -300,16 +368,33 @@ class BGPSpeaker(object):
 
         """
 
-        assert conf_type == NEIGHBOR_CONF_MED
+        assert conf_type == NEIGHBOR_CONF_MED or conf_type == CONNECT_MODE
 
         func_name = 'neighbor.update'
         attribute_param = {}
         if conf_type == NEIGHBOR_CONF_MED:
             attribute_param = {neighbors.MULTI_EXIT_DISC: conf_value}
+        elif conf_type == CONNECT_MODE:
+            attribute_param = {neighbors.CONNECT_MODE: conf_value}
 
         param = {neighbors.IP_ADDRESS: address,
                  neighbors.CHANGES: attribute_param}
         call(func_name, **param)
+
+    def neighbor_state_get(self, address=None, format='json'):
+        """ This method returns the state of peer(s) in a json
+        format.
+
+        ``address`` specifies the address of a peer. If not given, the
+        state of all the peers return.
+
+        """
+        show = {}
+        show['params'] = ['neighbor', 'summary']
+        if address:
+            show['params'].append(address)
+        show['format'] = format
+        return call('operator.show', **show)
 
     def prefix_add(self, prefix, next_hop=None, route_dist=None):
         """ This method adds a new prefix to be advertized.
@@ -344,7 +429,7 @@ class BGPSpeaker(object):
                 networks[NEXT_HOP] = \
                     str(netaddr.IPAddress(next_hop).ipv6())
 
-        call(func_name, **networks)
+        return call(func_name, **networks)
 
     def prefix_del(self, prefix, route_dist=None):
         """ This method deletes a advertized prefix.
@@ -424,6 +509,29 @@ class BGPSpeaker(object):
         """
         show = {}
         show['params'] = ['rib', family]
+        show['format'] = format
+        return call('operator.show', **show)
+
+    def neighbor_get(self, routetype, address, format='json'):
+        """ This method returns the BGP adj-RIB-in information in a json
+        format.
+
+        ``routetype`` This parameter is necessary for only received-routes
+        and sent-routes.
+
+          received-routes : paths received and not withdrawn by given peer
+
+          sent-routes : paths sent and not withdrawn to given peer
+
+        ``address`` specifies the IP address of the peer. It must be
+        the string representation of an IP address.
+
+        """
+        show = {}
+        if routetype == 'sent-routes' or routetype == 'received-routes':
+            show['params'] = ['neighbor', routetype, address, 'all']
+        else:
+            show['params'] = ['neighbor', 'received-routes', address, 'all']
         show['format'] = format
         return call('operator.show', **show)
 

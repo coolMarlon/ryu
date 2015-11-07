@@ -100,20 +100,27 @@ from ryu.ofproto import inet
 #   and process will apply and go to next table.
 #
 # * for no vlan
-# POST /qos/{switch-id}/{vlan-id}
+# POST /qos/{switch-id}
 #
 # * for specific vlan group
 # POST /qos/{switch-id}/{vlan-id}
 #
 #  request body format:
-#   {"match": {"<field1>": "<value1>", "<field2>": "<value2>",...},
+#   {"priority": "<value>",
+#    "match": {"<field1>": "<value1>", "<field2>": "<value2>",...},
 #    "actions": {"<action1>": "<value1>", "<action2>": "<value2>",...}
 #   }
 #
 #  Description
+#    * priority field
+#     <value>
+#    "0 to 65533"
+#
+#   Note: When "priority" has not been set up,
+#         "priority: 1" is set to "priority".
+#
 #    * match field
 #     <field> : <value>
-#    "priority": "0 to 65533"
 #    "in_port" : "<int>"
 #    "dl_src"  : "<xx:xx:xx:xx:xx:xx>"
 #    "dl_dst"  : "<xx:xx:xx:xx:xx:xx>"
@@ -127,7 +134,8 @@ from ryu.ofproto import inet
 #    "tp_dst"  : "<int>"
 #    "ip_dscp" : "<int>"
 #
-#    * action field
+#    * actions field
+#     <field> : <value>
 #    "mark": <dscp-value>
 #    sets the IPv4 ToS/DSCP field to tos.
 #    "meter": <meter-id>
@@ -185,7 +193,6 @@ REST_SWITCHID = 'switch_id'
 REST_COMMAND_RESULT = 'command_result'
 REST_PRIORITY = 'priority'
 REST_VLANID = 'vlan_id'
-REST_DL_VLAN = 'dl_vlan'
 REST_PORT_NAME = 'port_name'
 REST_QUEUE_TYPE = 'type'
 REST_QUEUE_MAX_RATE = 'max_rate'
@@ -392,7 +399,7 @@ class QoSController(ControllerBase):
         try:
             f_ofs = QoS(dp, CONF)
             f_ofs.set_default_flow()
-        except OFPUnknownVersion, message:
+        except OFPUnknownVersion as message:
             QoSController._LOGGER.info('dpid=%s: %s',
                                        dpid_str, message)
             return
@@ -499,7 +506,7 @@ class QoSController(ControllerBase):
 
     def _access_switch(self, req, switchid, vlan_id, func, waiters):
         try:
-            rest = eval(req.body) if req.body else {}
+            rest = json.loads(req.body) if req.body else {}
         except SyntaxError:
             QoSController._LOGGER.debug('invalid syntax %s', req.body)
             return Response(status=400)
@@ -507,7 +514,7 @@ class QoSController(ControllerBase):
         try:
             dps = self._OFS_LIST.get_ofs(switchid)
             vid = QoSController._conv_toint_vlanid(vlan_id)
-        except ValueError, message:
+        except ValueError as message:
             return Response(status=400, body=str(message))
 
         msgs = []
@@ -518,7 +525,7 @@ class QoSController(ControllerBase):
                     msg = function(rest, vid, waiters)
                 else:
                     msg = function(rest, vid)
-            except ValueError, message:
+            except ValueError as message:
                 return Response(status=400, body=str(message))
             msgs.append(msg)
 
@@ -691,7 +698,7 @@ class QoS(object):
                 self.ovs_bridge.set_qos(port_name, type=queue_type,
                                         max_rate=parent_max_rate,
                                         queues=queue_config)
-            except Exception, msg:
+            except Exception as msg:
                 raise ValueError(msg)
 
         msg = {'result': 'success',
@@ -732,7 +739,7 @@ class QoS(object):
         if vlan_id:
             match_value[REST_DL_VLAN] = vlan_id
 
-        priority = int(match_value.get(REST_PRIORITY, QOS_PRIORITY_MIN))
+        priority = int(rest.get(REST_PRIORITY, QOS_PRIORITY_MIN))
         if (QOS_PRIORITY_MAX < priority):
             raise ValueError('Invalid priority value. Set [%d-%d]'
                              % (QOS_PRIORITY_MIN, QOS_PRIORITY_MAX))

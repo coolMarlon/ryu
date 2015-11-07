@@ -20,7 +20,6 @@ import logging
 import struct
 from struct import *
 from nose.tools import *
-from nose.plugins.skip import Skip, SkipTest
 from ryu.ofproto import ether, inet
 from ryu.lib.packet.ethernet import ethernet
 from ryu.lib.packet.packet import Packet
@@ -101,7 +100,7 @@ class Test_vlan(unittest.TestCase):
         csum = 0xa7f2
         src = '131.151.32.21'
         dst = '131.151.32.129'
-        option = 'TEST'
+        option = b'TEST'
         ip = ipv4(version, header_length, tos, total_length, identification,
                   flags, offset, ttl, proto, csum, src, dst, option)
 
@@ -218,7 +217,7 @@ class Test_svlan(unittest.TestCase):
         csum = 0xa7f2
         src = '131.151.32.21'
         dst = '131.151.32.129'
-        option = 'TEST'
+        option = b'TEST'
         ip = ipv4(version, header_length, tos, total_length, identification,
                   flags, offset, ttl, proto, csum, src, dst, option)
 

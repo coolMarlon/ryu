@@ -32,10 +32,12 @@ def to_actions(dp, acts):
     for a in acts:
         action_type = a.get('type')
         if action_type == 'OUTPUT':
-            out_port = int(a.get('port', ofproto_v1_0.OFPP_NONE))
-            max_len = int(a.get('max_len', 65535))
-            actions.append(dp.ofproto_parser.OFPActionOutput(
-                out_port, max_len=max_len))
+            port = int(a.get('port', ofproto_v1_0.OFPP_NONE))
+            # NOTE: The reason of this magic number (0xffe5)
+            #       is because there is no good constant in of1.0.
+            #       The same value as OFPCML_MAX of of1.2 and of1.3 is used.
+            max_len = int(a.get('max_len', 0xffe5))
+            actions.append(dp.ofproto_parser.OFPActionOutput(port, max_len))
         elif action_type == 'SET_VLAN_VID':
             vlan_vid = int(a.get('vlan_vid', 0xffff))
             actions.append(dp.ofproto_parser.OFPActionVlanVid(vlan_vid))
@@ -50,8 +52,27 @@ def to_actions(dp, acts):
         elif action_type == 'SET_DL_DST':
             dl_dst = haddr_to_bin(a.get('dl_dst'))
             actions.append(dp.ofproto_parser.OFPActionSetDlDst(dl_dst))
+        elif action_type == 'SET_NW_SRC':
+            nw_src = ipv4_to_int(a.get('nw_src'))
+            actions.append(dp.ofproto_parser.OFPActionSetNwSrc(nw_src))
+        elif action_type == 'SET_NW_DST':
+            nw_dst = ipv4_to_int(a.get('nw_dst'))
+            actions.append(dp.ofproto_parser.OFPActionSetNwDst(nw_dst))
+        elif action_type == 'SET_NW_TOS':
+            nw_tos = int(a.get('nw_tos', 0))
+            actions.append(dp.ofproto_parser.OFPActionSetNwTos(nw_tos))
+        elif action_type == 'SET_TP_SRC':
+            tp_src = int(a.get('tp_src', 0))
+            actions.append(dp.ofproto_parser.OFPActionSetTpSrc(tp_src))
+        elif action_type == 'SET_TP_DST':
+            tp_dst = int(a.get('tp_dst', 0))
+            actions.append(dp.ofproto_parser.OFPActionSetTpDst(tp_dst))
+        elif action_type == 'ENQUEUE':
+            port = int(a.get('port', ofproto_v1_0.OFPP_NONE))
+            queue_id = int(a.get('queue_id', 0))
+            actions.append(dp.ofproto_parser.OFPActionEnqueue(port, queue_id))
         else:
-            LOG.debug('Unknown action type')
+            LOG.error('Unknown action type')
 
     return actions
 
@@ -73,11 +94,37 @@ def actions_to_str(acts):
             buf = 'SET_DL_SRC:' + haddr_to_str(a.dl_addr)
         elif action_type == ofproto_v1_0.OFPAT_SET_DL_DST:
             buf = 'SET_DL_DST:' + haddr_to_str(a.dl_addr)
+        elif action_type == ofproto_v1_0.OFPAT_SET_NW_SRC:
+            buf = 'SET_NW_SRC:' + \
+                  socket.inet_ntoa(struct.pack('!I', a.nw_addr))
+        elif action_type == ofproto_v1_0.OFPAT_SET_NW_DST:
+            buf = 'SET_NW_DST:' + \
+                  socket.inet_ntoa(struct.pack('!I', a.nw_addr))
+        elif action_type == ofproto_v1_0.OFPAT_SET_NW_TOS:
+            buf = 'SET_NW_TOS:' + str(a.tos)
+        elif action_type == ofproto_v1_0.OFPAT_SET_TP_SRC:
+            buf = 'SET_TP_SRC:' + str(a.tp)
+        elif action_type == ofproto_v1_0.OFPAT_SET_TP_DST:
+            buf = 'SET_TP_DST:' + str(a.tp)
+        elif action_type == ofproto_v1_0.OFPAT_ENQUEUE:
+            buf = 'ENQUEUE:' + str(a.port) + ":" + str(a.queue_id)
+        elif action_type == ofproto_v1_0.OFPAT_VENDOR:
+            buf = 'VENDOR'
         else:
             buf = 'UNKNOWN'
         actions.append(buf)
 
     return actions
+
+
+def ipv4_to_int(addr):
+    ip = addr.split('.')
+    assert len(ip) == 4
+    i = 0
+    for b in ip:
+        b = int(b)
+        i = (i << 8) | b
+    return i
 
 
 def to_match(dp, attrs):
@@ -149,7 +196,7 @@ def to_match(dp, attrs):
             tp_dst = int(value)
             wildcards &= ~ofp.OFPFW_TP_DST
         else:
-            LOG.debug("unknown match name %s, %s, %d", key, value, len(key))
+            LOG.error("unknown match name %s, %s, %d", key, value, len(key))
 
     match = dp.ofproto_parser.OFPMatch(
         wildcards, in_port, dl_src, dl_dst, dl_vlan, dl_vlan_pcp,
@@ -159,17 +206,46 @@ def to_match(dp, attrs):
 
 
 def match_to_str(m):
-    return {'dl_dst': haddr_to_str(m.dl_dst),
-            'dl_src': haddr_to_str(m.dl_src),
-            'dl_type': m.dl_type,
-            'dl_vlan': m.dl_vlan,
-            'dl_vlan_pcp': m.dl_vlan_pcp,
-            'in_port': m.in_port,
-            'nw_dst': nw_dst_to_str(m.wildcards, m.nw_dst),
-            'nw_proto': m.nw_proto,
-            'nw_src': nw_src_to_str(m.wildcards, m.nw_src),
-            'tp_src': m.tp_src,
-            'tp_dst': m.tp_dst}
+
+    match = {}
+
+    if ~m.wildcards & ofproto_v1_0.OFPFW_IN_PORT:
+        match['in_port'] = m.in_port
+
+    if ~m.wildcards & ofproto_v1_0.OFPFW_DL_SRC:
+        match['dl_src'] = haddr_to_str(m.dl_src)
+
+    if ~m.wildcards & ofproto_v1_0.OFPFW_DL_DST:
+        match['dl_dst'] = haddr_to_str(m.dl_dst)
+
+    if ~m.wildcards & ofproto_v1_0.OFPFW_DL_VLAN:
+        match['dl_vlan'] = m.dl_vlan
+
+    if ~m.wildcards & ofproto_v1_0.OFPFW_DL_VLAN_PCP:
+        match['dl_vlan_pcp'] = m.dl_vlan_pcp
+
+    if ~m.wildcards & ofproto_v1_0.OFPFW_DL_TYPE:
+        match['dl_type'] = m.dl_type
+
+    if ~m.wildcards & ofproto_v1_0.OFPFW_NW_TOS:
+        match['nw_tos'] = m.nw_tos
+
+    if ~m.wildcards & ofproto_v1_0.OFPFW_NW_PROTO:
+        match['nw_proto'] = m.nw_proto
+
+    if ~m.wildcards & ofproto_v1_0.OFPFW_NW_SRC_ALL:
+        match['nw_src'] = nw_src_to_str(m.wildcards, m.nw_src)
+
+    if ~m.wildcards & ofproto_v1_0.OFPFW_NW_DST_ALL:
+        match['nw_dst'] = nw_dst_to_str(m.wildcards, m.nw_dst)
+
+    if ~m.wildcards & ofproto_v1_0.OFPFW_TP_SRC:
+        match['tp_src'] = m.tp_src
+
+    if ~m.wildcards & ofproto_v1_0.OFPFW_TP_DST:
+        match['tp_dst'] = m.tp_dst
+
+    return match
 
 
 def nw_src_to_str(wildcards, addr):
@@ -198,10 +274,18 @@ def send_stats_request(dp, stats, waiters, msgs):
     dp.set_xid(stats)
     waiters_per_dp = waiters.setdefault(dp.id, {})
     lock = hub.Event()
+    previous_msg_len = len(msgs)
     waiters_per_dp[stats.xid] = (lock, msgs)
     dp.send_msg(stats)
 
     lock.wait(timeout=DEFAULT_TIMEOUT)
+    current_msg_len = len(msgs)
+
+    while current_msg_len > previous_msg_len:
+        previous_msg_len = current_msg_len
+        lock.wait(timeout=DEFAULT_TIMEOUT)
+        current_msg_len = len(msgs)
+
     if not lock.is_set():
         del waiters_per_dp[stats.xid]
 
@@ -218,6 +302,25 @@ def get_desc_stats(dp, waiters):
              'sw_desc': stats.sw_desc,
              'serial_num': stats.serial_num,
              'dp_desc': stats.dp_desc}
+    desc = {str(dp.id): s}
+    return desc
+
+
+def get_queue_stats(dp, waiters):
+    stats = dp.ofproto_parser.OFPQueueStatsRequest(dp, 0, dp.ofproto.OFPP_ALL,
+                                                   dp.ofproto.OFPQ_ALL)
+    msgs = []
+    send_stats_request(dp, stats, waiters, msgs)
+
+    s = []
+    for msg in msgs:
+        stats = msg.body
+        for stat in stats:
+            s.append({'port_no': stat.port_no,
+                      'queue_id': stat.queue_id,
+                      'tx_bytes': stat.tx_bytes,
+                      'tx_errors': stat.tx_errors,
+                      'tx_packets': stat.tx_packets})
     desc = {str(dp.id): s}
     return desc
 
@@ -253,6 +356,81 @@ def get_flow_stats(dp, waiters, flow={}):
             flows.append(s)
     flows = {str(dp.id): flows}
     return flows
+
+
+def get_aggregate_flow_stats(dp, waiters, flow={}):
+    match = to_match(dp, flow.get('match', {}))
+    table_id = int(flow.get('table_id', 0xff))
+    out_port = int(flow.get('out_port', dp.ofproto.OFPP_NONE))
+
+    stats = dp.ofproto_parser.OFPAggregateStatsRequest(
+        dp, 0, match, table_id, out_port)
+
+    msgs = []
+    send_stats_request(dp, stats, waiters, msgs)
+
+    flows = []
+    for msg in msgs:
+        stats = msg.body
+        for st in stats:
+            s = {'packet_count': st.packet_count,
+                 'byte_count': st.byte_count,
+                 'flow_count': st.flow_count}
+        flows.append(s)
+    flows = {str(dp.id): flows}
+
+    return flows
+
+
+def get_table_stats(dp, waiters):
+    stats = dp.ofproto_parser.OFPTableStatsRequest(dp, 0)
+    ofp = dp.ofproto
+    msgs = []
+    send_stats_request(dp, stats, waiters, msgs)
+
+    match_convert = {ofp.OFPFW_IN_PORT: 'IN_PORT',
+                     ofp.OFPFW_DL_VLAN: 'DL_VLAN',
+                     ofp.OFPFW_DL_SRC: 'DL_SRC',
+                     ofp.OFPFW_DL_DST: 'DL_DST',
+                     ofp.OFPFW_DL_TYPE: 'DL_TYPE',
+                     ofp.OFPFW_NW_PROTO: 'NW_PROTO',
+                     ofp.OFPFW_TP_SRC: 'TP_SRC',
+                     ofp.OFPFW_TP_DST: 'TP_DST',
+                     ofp.OFPFW_NW_SRC_SHIFT: 'NW_SRC_SHIFT',
+                     ofp.OFPFW_NW_SRC_BITS: 'NW_SRC_BITS',
+                     ofp.OFPFW_NW_SRC_MASK: 'NW_SRC_MASK',
+                     ofp.OFPFW_NW_SRC: 'NW_SRC',
+                     ofp.OFPFW_NW_SRC_ALL: 'NW_SRC_ALL',
+                     ofp.OFPFW_NW_DST_SHIFT: 'NW_DST_SHIFT',
+                     ofp.OFPFW_NW_DST_BITS: 'NW_DST_BITS',
+                     ofp.OFPFW_NW_DST_MASK: 'NW_DST_MASK',
+                     ofp.OFPFW_NW_DST: 'NW_DST',
+                     ofp.OFPFW_NW_DST_ALL: 'NW_DST_ALL',
+                     ofp.OFPFW_DL_VLAN_PCP: 'DL_VLAN_PCP',
+                     ofp.OFPFW_NW_TOS: 'NW_TOS',
+                     ofp.OFPFW_ALL: 'ALL',
+                     ofp.OFPFW_ICMP_TYPE: 'ICMP_TYPE',
+                     ofp.OFPFW_ICMP_CODE: 'ICMP_CODE'}
+
+    tables = []
+    for msg in msgs:
+        stats = msg.body
+        for stat in stats:
+            wildcards = []
+            for k, v in match_convert.items():
+                if (1 << k) & stat.wildcards:
+                    wildcards.append(v)
+            s = {'table_id': stat.table_id,
+                 'name': stat.name,
+                 'wildcards': wildcards,
+                 'max_entries': stat.max_entries,
+                 'active_count': stat.active_count,
+                 'lookup_count': stat.lookup_count,
+                 'matched_count': stat.matched_count}
+            tables.append(s)
+    desc = {str(dp.id): tables}
+
+    return desc
 
 
 def get_port_stats(dp, waiters):

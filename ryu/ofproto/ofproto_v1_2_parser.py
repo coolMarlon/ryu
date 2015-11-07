@@ -18,16 +18,17 @@
 Decoder/Encoder implementations of OpenFlow 1.2.
 """
 
+import six
 import struct
-import itertools
 
 from ryu.lib import addrconv
 from ryu.lib import mac
+from ryu.lib.pack_utils import msg_pack_into
 from ryu import utils
-from ofproto_parser import StringifyMixin, MsgBase, msg_pack_into, msg_str_attr
-from . import ether
-from . import ofproto_parser
-from . import ofproto_v1_2 as ofproto
+from ryu.ofproto.ofproto_parser import StringifyMixin, MsgBase
+from ryu.ofproto import ether
+from ryu.ofproto import ofproto_parser
+from ryu.ofproto import ofproto_v1_2 as ofproto
 
 import logging
 LOG = logging.getLogger('ryu.ofproto.ofproto_v1_2_parser')
@@ -129,7 +130,7 @@ class OFPErrorMsg(MsgBase):
 
     @classmethod
     def parser(cls, datapath, version, msg_type, msg_len, xid, buf):
-        type_, = struct.unpack_from('!H', buffer(buf),
+        type_, = struct.unpack_from('!H', six.binary_type(buf),
                                     ofproto.OFP_HEADER_SIZE)
         if type_ == ofproto.OFPET_EXPERIMENTER:
             return OFPErrorExperimenterMsg.parser(datapath, version, msg_type,
@@ -196,7 +197,6 @@ class OFPEchoRequest(MsgBase):
     Example::
 
         def send_echo_request(self, datapath, data):
-            ofp = datapath.ofproto
             ofp_parser = datapath.ofproto_parser
 
             req = ofp_parser.OFPEchoRequest(datapath, data)
@@ -242,7 +242,6 @@ class OFPEchoReply(MsgBase):
     Example::
 
         def send_echo_reply(self, datapath, data):
-            ofp = datapath.ofproto
             ofp_parser = datapath.ofproto_parser
 
             reply = ofp_parser.OFPEchoReply(datapath, data)
@@ -312,6 +311,36 @@ class OFPExperimenter(MsgBase):
 class OFPPort(ofproto_parser.namedtuple('OFPPort', (
         'port_no', 'hw_addr', 'name', 'config', 'state', 'curr',
         'advertised', 'supported', 'peer', 'curr_speed', 'max_speed'))):
+    """
+    Description of a port
+
+    ========== =========================================================
+    Attribute  Description
+    ========== =========================================================
+    port_no    Port number and it uniquely identifies a port within
+               a switch.
+    hw_addr    MAC address for the port.
+    name       Null-terminated string containing a human-readable name
+               for the interface.
+    config     Bitmap of port configration flags.
+
+               | OFPPC_PORT_DOWN
+               | OFPPC_NO_RECV
+               | OFPPC_NO_FWD
+               | OFPPC_NO_PACKET_IN
+    state      Bitmap of port state flags.
+
+               | OFPPS_LINK_DOWN
+               | OFPPS_BLOCKED
+               | OFPPS_LIVE
+    curr       Current features.
+    advertised Features being advertised by the port.
+    supported  Features supported by the port.
+    peer       Features advertised by peer.
+    curr_speed Current port bitrate in kbps.
+    max_speed  Max port bitrate in kbps.
+    ========== =========================================================
+    """
 
     _TYPE = {
         'ascii': [
@@ -331,7 +360,7 @@ class OFPPort(ofproto_parser.namedtuple('OFPPort', (
         i = cls._fields.index('hw_addr')
         port[i] = addrconv.mac.bin_to_text(port[i])
         i = cls._fields.index('name')
-        port[i] = port[i].rstrip('\0')
+        port[i] = port[i].rstrip(b'\0')
         return cls(*port)
 
 
@@ -404,7 +433,7 @@ class OFPSwitchFeatures(MsgBase):
             ofproto.OFP_HEADER_SIZE)
 
         msg.ports = {}
-        n_ports = ((msg_len - ofproto.OFP_SWITCH_FEATURES_SIZE) /
+        n_ports = ((msg_len - ofproto.OFP_SWITCH_FEATURES_SIZE) //
                    ofproto.OFP_PORT_SIZE)
         offset = ofproto.OFP_SWITCH_FEATURES_SIZE
         for i in range(n_ports):
@@ -570,6 +599,7 @@ class OFPPacketIn(MsgBase):
         @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
         def packet_in_handler(self, ev):
             msg = ev.msg
+            dp = msg.datapath
             ofp = dp.ofproto
 
             if msg.reason == ofp.OFPR_NO_MATCH:
@@ -1082,7 +1112,7 @@ class OFPInstructionActions(OFPInstruction):
 
         self.len = action_offset - offset
         pad_len = utils.round_up(self.len, 8) - self.len
-        ofproto_parser.msg_pack_into("%dx" % pad_len, buf, action_offset)
+        msg_pack_into("%dx" % pad_len, buf, action_offset)
         self.len += pad_len
 
         msg_pack_into(ofproto.OFP_INSTRUCTION_ACTIONS_PACK_STR,
@@ -1463,7 +1493,7 @@ class OFPActionSetField(OFPAction):
 
     Example::
 
-        set_field = OFPActionSetField(eth_src="00:00:00:00:00")
+        set_field = OFPActionSetField(eth_src="00:00:00:00:00:00")
     """
     def __init__(self, field=None, **kwargs):
         # old api
@@ -1478,9 +1508,9 @@ class OFPActionSetField(OFPAction):
         else:
             # new api
             assert len(kwargs) == 1
-            key = kwargs.keys()[0]
+            key = list(kwargs.keys())[0]
             value = kwargs[key]
-            assert isinstance(key, (str, unicode))
+            assert isinstance(key, (str, six.text_type))
             assert not isinstance(value, tuple)  # no mask
             self.key = key
             self.value = value
@@ -1508,7 +1538,7 @@ class OFPActionSetField(OFPAction):
         self.len = utils.round_up(4 + len_, 8)
         msg_pack_into('!HH', buf, offset, self.type, self.len)
         pad_len = self.len - (4 + len_)
-        ofproto_parser.msg_pack_into("%dx" % pad_len, buf, offset + 4 + len_)
+        msg_pack_into("%dx" % pad_len, buf, offset + 4 + len_)
 
     # XXX old api compat
     def serialize_old(self, buf, offset):
@@ -1519,7 +1549,7 @@ class OFPActionSetField(OFPAction):
         msg_pack_into('!HH', buf, offset, self.type, self.len)
         self.field.serialize(buf, offset + 4)
         offset += len_
-        ofproto_parser.msg_pack_into("%dx" % pad_len, buf, offset)
+        msg_pack_into("%dx" % pad_len, buf, offset)
 
     # XXX old api compat
     def _composed_with_old_api(self):
@@ -1533,7 +1563,7 @@ class OFPActionSetField(OFPAction):
             # serialize and parse to fill new fields
             buf = bytearray()
             o2.serialize(buf, 0)
-            o = OFPActionSetField.parser(str(buf), 0)
+            o = OFPActionSetField.parser(six.binary_type(buf), 0)
         else:
             o = self
         return {
@@ -1551,7 +1581,7 @@ class OFPActionSetField(OFPAction):
         # serialize and parse to fill old attributes
         buf = bytearray()
         o.serialize(buf, 0)
-        return OFPActionSetField.parser(str(buf), 0)
+        return OFPActionSetField.parser(six.binary_type(buf), 0)
 
     # XXX old api compat
     def __str__(self):
@@ -1562,7 +1592,7 @@ class OFPActionSetField(OFPAction):
             # serialize and parse to fill new fields
             buf = bytearray()
             o2.serialize(buf, 0)
-            o = OFPActionSetField.parser(str(buf), 0)
+            o = OFPActionSetField.parser(six.binary_type(buf), 0)
         else:
             o = self
         return super(OFPActionSetField, o).__str__()
@@ -1983,7 +2013,7 @@ class OFPDescStats(ofproto_parser.namedtuple('OFPDescStats', (
         desc = struct.unpack_from(ofproto.OFP_DESC_STATS_PACK_STR,
                                   buf, offset)
         desc = list(desc)
-        desc = map(lambda x: x.rstrip('\0'), desc)
+        desc = [x.rstrip(b'\0') for x in desc]
         stats = cls(*desc)
         stats.length = ofproto.OFP_DESC_STATS_SIZE
         return stats
@@ -2282,7 +2312,6 @@ class OFPTableStatsRequest(OFPStatsRequest):
     Example::
 
         def send_table_stats_request(self, datapath):
-            ofp = datapath.ofproto
             ofp_parser = datapath.ofproto_parser
 
             req = ofp_parser.OFPTableStatsRequest(datapath)
@@ -2373,7 +2402,7 @@ class OFPTableStats(
             buf, offset)
         table = list(table)
         i = cls._fields.index('name')
-        table[i] = table[i].rstrip('\0')
+        table[i] = table[i].rstrip(b'\0')
         stats = cls(*table)
         stats.length = ofproto.OFP_TABLE_STATS_SIZE
         return stats
@@ -2713,7 +2742,6 @@ class OFPGroupDescStatsRequest(OFPStatsRequest):
     Example::
 
         def send_group_desc_stats_request(self, datapath):
-            ofp = datapath.ofproto
             ofp_parser = datapath.ofproto_parser
 
             req = ofp_parser.OFPGroupDescStatsRequest(datapath)
@@ -2804,7 +2832,6 @@ class OFPGroupFeaturesStatsRequest(OFPStatsRequest):
     Example::
 
         def send_group_features_stats_request(self, datapath):
-            ofp = datapath.ofproto
             ofp_parser = datapath.ofproto_parser
 
             req = ofp_parser.OFPGroupFeaturesStatsRequest(datapath)
@@ -3146,6 +3173,7 @@ class OFPRoleReply(MsgBase):
         @set_ev_cls(ofp_event.EventOFPRoleReply, MAIN_DISPATCHER)
         def role_reply_handler(self, ev):
             msg = ev.msg
+            dp = msg.datapath
             ofp = dp.ofproto
 
             if msg.role == ofp.OFPCR_ROLE_NOCHANGE:
@@ -3316,6 +3344,66 @@ class OFPMatch(StringifyMixin):
         ...     print match['ipv6_src']
         ...
         ('2001:db8:bd05:1d2:288a:1fc0:1:10ee', 'ffff:ffff:ffff:ffff::')
+
+    .. Note::
+
+        For VLAN id match field, special values are defined in OpenFlow Spec.
+
+        1) Packets with and without a VLAN tag
+
+            - Example::
+
+                match = parser.OFPMatch()
+
+            - Packet Matching
+
+                ====================== =====
+                non-VLAN-tagged        MATCH
+                VLAN-tagged(vlan_id=3) MATCH
+                VLAN-tagged(vlan_id=5) MATCH
+                ====================== =====
+
+        2) Only packets without a VLAN tag
+
+            - Example::
+
+                match = parser.OFPMatch(vlan_vid=0x0000)
+
+            - Packet Matching
+
+                ====================== =====
+                non-VLAN-tagged        MATCH
+                VLAN-tagged(vlan_id=3)   x
+                VLAN-tagged(vlan_id=5)   x
+                ====================== =====
+
+        3) Only packets with a VLAN tag regardless of its value
+
+            - Example::
+
+                match = parser.OFPMatch(vlan_vid=(0x1000, 0x1000))
+
+            - Packet Matching
+
+                ====================== =====
+                non-VLAN-tagged          x
+                VLAN-tagged(vlan_id=3) MATCH
+                VLAN-tagged(vlan_id=5) MATCH
+                ====================== =====
+
+        4) Only packets with VLAN tag and VID equal
+
+            - Example::
+
+                match = parser.OFPMatch(vlan_vid=(0x1000 | 3))
+
+            - Packet Matching
+
+                ====================== =====
+                non-VLAN-tagged          x
+                VLAN-tagged(vlan_id=3) MATCH
+                VLAN-tagged(vlan_id=5)   x
+                ====================== =====
     """
 
     def __init__(self, type_=None, length=None, _ordered_fields=None,
@@ -3335,12 +3423,13 @@ class OFPMatch(StringifyMixin):
             #   OFPMatch(eth_src=('ff:ff:ff:00:00:00'), eth_type=0x800,
             #            ipv4_src='10.0.0.1')
             kwargs = dict(ofproto.oxm_normalize_user(k, v) for
-                          (k, v) in kwargs.iteritems())
+                          (k, v) in kwargs.items())
             fields = [ofproto.oxm_from_user(k, v) for (k, v)
-                      in kwargs.iteritems()]
+                      in kwargs.items()]
             # assumption: sorting by OXM type values makes fields
             # meet ordering requirements (eg. eth_type before ipv4_src)
-            fields.sort()
+            fields.sort(
+                key=lambda x: x[0][0] if isinstance(x[0], tuple) else x[0])
             self._fields2 = [ofproto.oxm_to_user(n, v, m) for (n, v, m)
                              in fields]
 
@@ -3351,7 +3440,10 @@ class OFPMatch(StringifyMixin):
         return key in dict(self._fields2)
 
     def iteritems(self):
-        return dict(self._fields2).iteritems()
+        return iter(dict(self._fields2).items())
+
+    def items(self):
+        return self._fields2
 
     def get(self, key, default=None):
         return dict(self._fields2).get(key, default)
@@ -3371,7 +3463,7 @@ class OFPMatch(StringifyMixin):
             # serialize and parse to fill OFPMatch._fields2
             buf = bytearray()
             o2.serialize(buf, 0)
-            o = OFPMatch.parser(str(buf), 0)
+            o = OFPMatch.parser(six.binary_type(buf), 0)
         else:
             o = self
 
@@ -3396,7 +3488,7 @@ class OFPMatch(StringifyMixin):
         # serialize and parse to fill OFPMatch.fields
         buf = bytearray()
         o.serialize(buf, 0)
-        return OFPMatch.parser(str(buf), 0)
+        return OFPMatch.parser(six.binary_type(buf), 0)
 
     def __str__(self):
         # XXX old api compat
@@ -3407,7 +3499,7 @@ class OFPMatch(StringifyMixin):
             # serialize and parse to fill OFPMatch._fields2
             buf = bytearray()
             o2.serialize(buf, 0)
-            o = OFPMatch.parser(str(buf), 0)
+            o = OFPMatch.parser(six.binary_type(buf), 0)
         else:
             o = self
         return super(OFPMatch, o).__str__()
@@ -3501,7 +3593,7 @@ class OFPMatch(StringifyMixin):
         self.length = length
 
         pad_len = utils.round_up(length, 8) - length
-        ofproto_parser.msg_pack_into("%dx" % pad_len, buf, field_offset)
+        msg_pack_into("%dx" % pad_len, buf, field_offset)
 
         return length + pad_len
 
@@ -3706,7 +3798,7 @@ class OFPMatch(StringifyMixin):
         msg_pack_into('!HH', buf, offset, ofproto.OFPMT_OXM, length)
 
         pad_len = utils.round_up(length, 8) - length
-        ofproto_parser.msg_pack_into("%dx" % pad_len, buf, field_offset)
+        msg_pack_into("%dx" % pad_len, buf, field_offset)
 
         return length + pad_len
 
@@ -3909,7 +4001,7 @@ class OFPMatch(StringifyMixin):
     def set_ipv6_src_masked(self, src, mask):
         self._wc.ft_set(ofproto.OFPXMT_OFB_IPV6_SRC)
         self._wc.ipv6_src_mask = mask
-        self._flow.ipv6_src = [x & y for (x, y) in itertools.izip(src, mask)]
+        self._flow.ipv6_src = [x & y for (x, y) in zip(src, mask)]
 
     def set_ipv6_dst(self, dst):
         self._wc.ft_set(ofproto.OFPXMT_OFB_IPV6_DST)
@@ -3918,7 +4010,7 @@ class OFPMatch(StringifyMixin):
     def set_ipv6_dst_masked(self, dst, mask):
         self._wc.ft_set(ofproto.OFPXMT_OFB_IPV6_DST)
         self._wc.ipv6_dst_mask = mask
-        self._flow.ipv6_dst = [x & y for (x, y) in itertools.izip(dst, mask)]
+        self._flow.ipv6_dst = [x & y for (x, y) in zip(dst, mask)]
 
     def set_ipv6_flabel(self, flabel):
         self.set_ipv6_flabel_masked(flabel, UINT32_MAX)
@@ -3976,7 +4068,7 @@ class OFPMatchField(StringifyMixin):
     @classmethod
     def cls_to_header(cls, cls_, hasmask):
         # XXX efficiency
-        inv = dict((v, k) for k, v in cls._FIELDS_HEADERS.iteritems()
+        inv = dict((v, k) for k, v in cls._FIELDS_HEADERS.items()
                    if (((k >> 8) & 1) != 0) == hasmask)
         return inv[cls_]
 
@@ -4013,11 +4105,11 @@ class OFPMatchField(StringifyMixin):
             self.put(buf, offset, self.value)
 
     def _put_header(self, buf, offset):
-        ofproto_parser.msg_pack_into('!I', buf, offset, self.header)
+        msg_pack_into('!I', buf, offset, self.header)
         self.length = 4
 
     def _put(self, buf, offset, value):
-        ofproto_parser.msg_pack_into(self.pack_str, buf, offset, value)
+        msg_pack_into(self.pack_str, buf, offset, value)
         self.length += self.n_bytes
 
     def put_w(self, buf, offset, value, mask):
@@ -4030,8 +4122,7 @@ class OFPMatchField(StringifyMixin):
         self._put(buf, offset + self.length, value)
 
     def _putv6(self, buf, offset, value):
-        ofproto_parser.msg_pack_into(self.pack_str, buf, offset,
-                                     *value)
+        msg_pack_into(self.pack_str, buf, offset, *value)
         self.length += self.n_bytes
 
     def putv6(self, buf, offset, value, mask=None):

@@ -16,6 +16,7 @@
 """
  Module provides utilities for validation.
 """
+import numbers
 import socket
 
 
@@ -30,7 +31,7 @@ def is_valid_ipv4(ipv4):
         valid = False
     else:
         try:
-            a, b, c, d = map(lambda x: int(x), ipv4.split('.'))
+            a, b, c, d = [int(x) for x in ipv4.split('.')]
             if (a < 0 or a > 255 or b < 0 or b > 255 or c < 0 or c > 255 or
                     d < 0 or d > 255):
                 valid = False
@@ -120,7 +121,7 @@ def is_valid_old_asn(asn):
     """
     valid = True
     # AS number should be a 16 bit number
-    if (not isinstance(asn, (int, long)) or (asn < 0) or
+    if (not isinstance(asn, numbers.Integral) or (asn < 0) or
             (asn > ((2 ** 16) - 1))):
         valid = False
 
@@ -165,7 +166,7 @@ def is_valid_med(med):
     """
     valid = True
 
-    if not isinstance(med, (int, long)):
+    if not isinstance(med, numbers.Integral):
         valid = False
     else:
         if med < 0 or med > (2 ** 32) - 1:
@@ -187,7 +188,7 @@ def is_valid_mpls_label(label):
     """
     valid = True
 
-    if (not isinstance(label, (int, long)) or
+    if (not isinstance(label, numbers.Integral) or
             (label >= 4 and label <= 15) or
             (label < 0 or label > 2 ** 20)):
         valid = False

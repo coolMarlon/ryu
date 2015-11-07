@@ -64,7 +64,7 @@ class VrfTable(Table):
 
     def init_import_maps(self, import_maps):
         LOG.debug(
-            "Initializing import maps (%s) for %s" % (import_maps, repr(self))
+            "Initializing import maps (%s) for %r", import_maps, self
         )
         del self._import_maps[:]
         importmap_manager = self._core_service.importmap_manager
@@ -102,7 +102,7 @@ class VrfTable(Table):
 
         remote_route_count = 0
         local_route_count = 0
-        for dest in self.itervalues():
+        for dest in self.values():
             for path in dest.known_path_list:
                 if (hasattr(path.source, 'version_num')
                         or path.source == VPN_TABLE):
@@ -115,7 +115,7 @@ class VrfTable(Table):
                 LOCAL_ROUTES: local_route_count}
 
     def import_vpn_paths_from_table(self, vpn_table, import_rts=None):
-        for vpn_dest in vpn_table.itervalues():
+        for vpn_dest in vpn_table.values():
             vpn_path = vpn_dest.best_path
             if not vpn_path:
                 continue
@@ -187,7 +187,7 @@ class VrfTable(Table):
 
     def apply_import_maps(self):
         changed_dests = []
-        for dest in self.itervalues():
+        for dest in self.values():
             assert isinstance(dest, VrfDest)
             for import_map in self._import_maps:
                 for path in dest.known_path_list:
@@ -306,7 +306,7 @@ class VrfDest(Destination):
             tm.learn_path(gpath)
 
     def _new_best_path(self, best_path):
-        LOG.debug('New best path selected for destination %s' % (self))
+        LOG.debug('New best path selected for destination %s', self)
 
         old_best_path = self._best_path
         assert (best_path != old_best_path)
@@ -335,8 +335,8 @@ class VrfDest(Destination):
             gpath = best_path.clone_to_vpn(self._route_dist)
             tm = self._core_service.table_manager
             tm.learn_path(gpath)
-            LOG.debug('VRF table %s has new best path: %s' %
-                      (self._route_dist, self.best_path))
+            LOG.debug('VRF table %s has new best path: %s',
+                      self._route_dist, self.best_path)
 
     def _remove_withdrawals(self):
         """Removes withdrawn paths.
@@ -348,7 +348,7 @@ class VrfDest(Destination):
         stopped by the same policies.
         """
 
-        LOG.debug('Removing %s withdrawals' % len(self._withdraw_list))
+        LOG.debug('Removing %s withdrawals', len(self._withdraw_list))
 
         # If we have not withdrawals, we have nothing to do.
         if not self._withdraw_list:
@@ -358,7 +358,7 @@ class VrfDest(Destination):
         # delete these withdraws.
         if not self._known_path_list:
             LOG.debug('Found %s withdrawals for path(s) that did not get'
-                      ' installed.' % len(self._withdraw_list))
+                      ' installed.', len(self._withdraw_list))
             del (self._withdraw_list[:])
             return
 
@@ -380,13 +380,13 @@ class VrfDest(Destination):
                 # We do no have any match for this withdraw.
             if not match:
                 LOG.debug('No matching path for withdraw found, may be path '
-                          'was not installed into table: %s' %
+                          'was not installed into table: %s',
                           withdraw)
             # If we have partial match.
         if len(matches) != len(self._withdraw_list):
             LOG.debug('Did not find match for some withdrawals. Number of '
-                      'matches(%s), number of withdrawals (%s)' %
-                      (len(matches), len(self._withdraw_list)))
+                      'matches(%s), number of withdrawals (%s)',
+                      len(matches), len(self._withdraw_list))
 
         # Clear matching paths and withdrawals.
         for match in matches:
@@ -416,7 +416,7 @@ class VrfDest(Destination):
             for old_path in old_paths:
                 known_paths.remove(old_path)
                 LOG.debug('Implicit withdrawal of old path, since we have'
-                          ' learned new path from same source: %s' % old_path)
+                          ' learned new path from same source: %s', old_path)
 
     def _validate_path(self, path):
         if not path or not hasattr(path, 'label_list'):

@@ -65,7 +65,7 @@ def _likely_same(a, b):
 
 def _find_loaded_module(modpath):
     # copy() to avoid RuntimeError: dictionary changed size during iteration
-    for k, m in sys.modules.copy().iteritems():
+    for k, m in sys.modules.copy().items():
         if k == '__main__':
             continue
         if not hasattr(m, '__file__'):
@@ -95,28 +95,23 @@ def import_module(modname):
 
 
 def round_up(x, y):
-    return ((x + y - 1) / y) * y
-
-
-def _str_to_hex(data):
-    """Convert string into array of hexes to be printed."""
-    return ' '.join(hex(ord(char)) for char in data)
-
-
-def _bytearray_to_hex(data):
-    """Convert bytearray into array of hexes to be printed."""
-    return ' '.join(hex(byte) for byte in data)
+    return ((x + y - 1) // y) * y
 
 
 def hex_array(data):
-    """Convert string or bytearray into array of hexes to be printed."""
-    to_hex = {str: _str_to_hex,
-              bytearray: _bytearray_to_hex}
-    try:
-        return to_hex[type(data)](data)
-    except KeyError:
-        LOG.exception('%s is invalid data type', type(data))
-        return None
+    """
+    Convert six.binary_type or bytearray into array of hexes to be printed.
+    """
+    # convert data into bytearray explicitly
+    return ' '.join('0x%02x' % byte for byte in bytearray(data))
+
+
+def binary_str(data):
+    """
+    Convert six.binary_type or bytearray into str to be printed.
+    """
+    # convert data into bytearray explicitly
+    return ''.join('\\x%02x' % byte for byte in bytearray(data))
 
 
 # the following functions are taken from OpenStack

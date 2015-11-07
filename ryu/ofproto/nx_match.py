@@ -1,4 +1,4 @@
-# Copyright (C) 2011, 2012 Nippon Telegraph and Telephone Corporation.
+# Copyright (C) 2011-2015 Nippon Telegraph and Telephone Corporation.
 # Copyright (C) 2011, 2012 Isaku Yamahata <yamahata at valinux co jp>
 # Copyright (C) 2012 Simon Horman <horms ad verge net au>
 #
@@ -16,13 +16,15 @@
 # limitations under the License.
 
 import struct
-import itertools
 
 from ryu import exception
 from ryu.lib import mac
-from . import ofproto_parser
-from . import ofproto_v1_0
-from . import inet
+from ryu.lib import type_desc
+from ryu.lib.pack_utils import msg_pack_into
+from ryu.ofproto import ofproto_parser
+from ryu.ofproto import ofproto_v1_0
+from ryu.ofproto import inet
+from ryu.ofproto import oxm_fields
 
 import logging
 LOG = logging.getLogger('ryu.ofproto.nx_match')
@@ -63,7 +65,7 @@ _MF_FIELDS = {}
 FLOW_N_REGS = 8  # ovs 1.5
 
 
-class Flow(object):
+class Flow(ofproto_parser.StringifyMixin):
     def __init__(self):
         self.in_port = 0
         self.dl_vlan = 0
@@ -90,9 +92,10 @@ class Flow(object):
         self.nw_frag = 0
         self.regs = [0] * FLOW_N_REGS
         self.ipv6_label = 0
+        self.pkt_mark = 0
 
 
-class FlowWildcards(object):
+class FlowWildcards(ofproto_parser.StringifyMixin):
     def __init__(self):
         self.dl_src_mask = 0
         self.dl_dst_mask = 0
@@ -111,14 +114,31 @@ class FlowWildcards(object):
         self.regs_bits = 0
         self.regs_mask = [0] * FLOW_N_REGS
         self.wildcards = ofproto_v1_0.OFPFW_ALL
+        self.pkt_mark_mask = 0
 
 
-class ClsRule(object):
+class ClsRule(ofproto_parser.StringifyMixin):
     """describe a matching rule for OF 1.0 OFPMatch (and NX).
     """
-    def __init__(self):
+    def __init__(self, **kwargs):
         self.wc = FlowWildcards()
         self.flow = Flow()
+
+        for key, value in kwargs.items():
+            if key[:3] == 'reg':
+                register = int(key[3:] or -1)
+                self.set_reg(register, value)
+                continue
+
+            setter = getattr(self, 'set_' + key, None)
+            if not setter:
+                LOG.error('Invalid kwarg specified to ClsRule (%s)', key)
+                continue
+
+            if not isinstance(value, (tuple, list)):
+                value = (value, )
+
+            setter(*value)
 
     def set_in_port(self, port):
         self.wc.wildcards &= ~FWW_IN_PORT
@@ -257,20 +277,16 @@ class ClsRule(object):
         self.wc.wildcards &= ~FWW_IPV6_LABEL
         self.flow.ipv6_label = label
 
-    def set_ipv6_label(self, label):
-        self.wc.wildcards &= ~FWW_IPV6_LABEL
-        self.flow.ipv6_label = label
-
     def set_ipv6_src_masked(self, src, mask):
         self.wc.ipv6_src_mask = mask
-        self.flow.ipv6_src = [x & y for (x, y) in itertools.izip(src, mask)]
+        self.flow.ipv6_src = [x & y for (x, y) in zip(src, mask)]
 
     def set_ipv6_src(self, src):
         self.flow.ipv6_src = src
 
     def set_ipv6_dst_masked(self, dst, mask):
         self.wc.ipv6_dst_mask = mask
-        self.flow.ipv6_dst = [x & y for (x, y) in itertools.izip(dst, mask)]
+        self.flow.ipv6_dst = [x & y for (x, y) in zip(dst, mask)]
 
     def set_ipv6_dst(self, dst):
         self.flow.ipv6_dst = dst
@@ -278,7 +294,7 @@ class ClsRule(object):
     def set_nd_target_masked(self, target, mask):
         self.wc.nd_target_mask = mask
         self.flow.nd_target = [x & y for (x, y) in
-                               itertools.izip(target, mask)]
+                               zip(target, mask)]
 
     def set_nd_target(self, target):
         self.flow.nd_target = target
@@ -290,6 +306,10 @@ class ClsRule(object):
         self.wc.regs_mask[reg_idx] = mask
         self.flow.regs[reg_idx] = value
         self.wc.regs_bits |= (1 << reg_idx)
+
+    def set_pkt_mark_masked(self, pkt_mark, mask):
+        self.flow.pkt_mark = pkt_mark
+        self.wc.pkt_mark_mask = mask
 
     def flow_format(self):
         # Tunnel ID is only supported by NXM
@@ -306,6 +326,9 @@ class ClsRule(object):
 
         # ECN is only supported by NXM
         if not self.wc.wildcards & FWW_NW_ECN:
+            return ofproto_v1_0.NXFF_NXM
+
+        if self.wc.regs_bits > 0:
             return ofproto_v1_0.NXFF_NXM
 
         return ofproto_v1_0.NXFF_OPENFLOW10
@@ -437,7 +460,7 @@ class MFField(object):
         return cls(header, value, mask)
 
     def _put(self, buf, offset, value):
-        ofproto_parser.msg_pack_into(self.pack_str, buf, offset, value)
+        msg_pack_into(self.pack_str, buf, offset, value)
         return self.n_bytes
 
     def putw(self, buf, offset, value, mask):
@@ -456,8 +479,7 @@ class MFField(object):
             return self.putw(buf, offset, value, mask)
 
     def _putv6(self, buf, offset, value):
-        ofproto_parser.msg_pack_into(self.pack_str, buf, offset,
-                                     *value)
+        msg_pack_into(self.pack_str, buf, offset, *value)
         return self.n_bytes
 
     def putv6(self, buf, offset, value, mask):
@@ -912,6 +934,19 @@ class MFRegister(MFField):
                     return self._put(buf, offset, rule.flow.regs[i])
 
 
+@_register_make
+@_set_nxm_headers([ofproto_v1_0.NXM_NX_PKT_MARK,
+                   ofproto_v1_0.NXM_NX_PKT_MARK_W])
+class MFPktMark(MFField):
+    @classmethod
+    def make(cls, header):
+        return cls(header, MF_PACK_STRING_BE32)
+
+    def put(self, buf, offset, rule):
+        return self.putm(buf, offset, rule.flow.pkt_mark,
+                         rule.wc.pkt_mark_mask)
+
+
 def serialize_nxm_match(rule, buf, offset):
     old_offset = offset
 
@@ -1069,6 +1104,13 @@ def serialize_nxm_match(rule, buf, offset):
             header = ofproto_v1_0.NXM_NX_IP_FRAG_W
         offset += nxm_put(buf, offset, header, rule)
 
+    if rule.flow.pkt_mark != 0:
+        if rule.wc.pkt_mark_mask == UINT32_MAX:
+            header = ofproto_v1_0.NXM_NX_PKT_MARK
+        else:
+            header = ofproto_v1_0.NXM_NX_PKT_MARK_W
+        offset += nxm_put(buf, offset, header, rule)
+
     # Tunnel Id
     if rule.wc.tun_id_mask != 0:
         if rule.wc.tun_id_mask == UINT64_MAX:
@@ -1089,7 +1131,7 @@ def serialize_nxm_match(rule, buf, offset):
 
     # Pad
     pad_len = round_up(offset) - offset
-    ofproto_parser.msg_pack_into("%dx" % pad_len, buf, offset)
+    msg_pack_into("%dx" % pad_len, buf, offset)
 
     # The returned length, the match_len, does not include the pad
     return offset - old_offset
@@ -1103,7 +1145,7 @@ def nxm_put(buf, offset, header, rule):
 
 
 def round_up(length):
-    return (length + 7) / 8 * 8  # Round up to a multiple of 8
+    return (length + 7) // 8 * 8  # Round up to a multiple of 8
 
 
 class NXMatch(object):
@@ -1143,6 +1185,37 @@ class NXMatch(object):
                  self.hasmask(), self.length()))
 
     def put_header(self, buf, offset):
-        ofproto_parser.msg_pack_into(ofproto_v1_0.NXM_HEADER_PACK_STRING,
-                                     buf, offset, self.header)
+        msg_pack_into(ofproto_v1_0.NXM_HEADER_PACK_STRING,
+                      buf, offset, self.header)
         return struct.calcsize(ofproto_v1_0.NXM_HEADER_PACK_STRING)
+
+
+#
+# The followings are implementations for OpenFlow 1.2+
+#
+
+oxm_types = [
+    oxm_fields.NiciraExtended0('eth_dst_nxm', 1, type_desc.MacAddr),
+    oxm_fields.NiciraExtended0('eth_src_nxm', 2, type_desc.MacAddr),
+    oxm_fields.NiciraExtended1('tunnel_id_nxm', 16, type_desc.Int8),
+    oxm_fields.NiciraExtended1('tun_ipv4_src', 31, type_desc.IPv4Addr),
+    oxm_fields.NiciraExtended1('tun_ipv4_dst', 32, type_desc.IPv4Addr),
+    oxm_fields.NiciraExtended1('pkt_mark', 33, type_desc.Int4),
+    oxm_fields.NiciraExtended1('conj_id', 37, type_desc.Int4),
+
+    # The following definition is merely for testing 64-bit experimenter OXMs.
+    # Following Open vSwitch, we use dp_hash for this purpose.
+    # Prefix the name with '_' to indicate this is not intended to be used
+    # in wild.
+    oxm_fields.NiciraExperimenter('_dp_hash', 0, type_desc.Int4),
+
+    # Support for matching/setting NX registers 0-7
+    oxm_fields.NiciraExtended1('reg0', 0, type_desc.Int4),
+    oxm_fields.NiciraExtended1('reg1', 1, type_desc.Int4),
+    oxm_fields.NiciraExtended1('reg2', 2, type_desc.Int4),
+    oxm_fields.NiciraExtended1('reg3', 3, type_desc.Int4),
+    oxm_fields.NiciraExtended1('reg4', 4, type_desc.Int4),
+    oxm_fields.NiciraExtended1('reg5', 5, type_desc.Int4),
+    oxm_fields.NiciraExtended1('reg6', 6, type_desc.Int4),
+    oxm_fields.NiciraExtended1('reg7', 7, type_desc.Int4),
+]

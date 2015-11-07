@@ -28,6 +28,7 @@ import itertools
 import logging
 import sys
 import os
+import gc
 
 from ryu import cfg
 from ryu import utils
@@ -45,7 +46,6 @@ SERVICE_BRICKS = {}
 
 
 def lookup_service_brick(name):
-    # LOG.info('lookup_service_brick  %s', name)
     return SERVICE_BRICKS.get(name)
 
 
@@ -59,8 +59,6 @@ def _lookup_service_brick_by_mod_name(mod_name):
 
 def register_app(app):
     assert isinstance(app, RyuApp)
-    # print "SERVICE_BRICKS:", SERVICE_BRICKS
-
     assert app.name not in SERVICE_BRICKS
     SERVICE_BRICKS[app.name] = app
     register_instance(app)
@@ -79,11 +77,12 @@ def require_app(app_name, api_style=False):
 
     If this is used for client application module, set api_style=False.
     """
+    iterable = (inspect.getmodule(frame[0]) for frame in inspect.stack())
+    modules = [module for module in iterable if module is not None]
     if api_style:
-        frm = inspect.stack()[2]  # skip a frame for "api" module
+        m = modules[2]  # skip a frame for "api" module
     else:
-        frm = inspect.stack()[1]
-    m = inspect.getmodule(frm[0])  # client module
+        m = modules[1]
     m._REQUIRED_APP = getattr(m, '_REQUIRED_APP', [])
     m._REQUIRED_APP.append(app_name)
     LOG.debug('require_app: %s is required by %s', app_name, m.__name__)
@@ -149,7 +148,7 @@ class RyuApp(object):
         """
         Return iterator over the (key, contxt class) of application context
         """
-        return cls._CONTEXTS.iteritems()
+        return iter(cls._CONTEXTS.items())
 
     def __init__(self, *_args, **_kwargs):
         super(RyuApp, self).__init__()
@@ -245,7 +244,7 @@ class RyuApp(object):
 
     def get_observers(self, ev, state):
         observers = []
-        for k, v in self.observers.get(ev.__class__, {}).iteritems():
+        for k, v in self.observers.get(ev.__class__, {}).items():
             if not state or not v or state in v:
                 observers.append(k)
 
@@ -270,7 +269,6 @@ class RyuApp(object):
     def _event_loop(self):
         while self.is_active or not self.events.empty():
             ev, state = self.events.get()
-
             if ev == self._event_stop:
                 continue
             handlers = self.get_handlers(ev, state)
@@ -288,12 +286,12 @@ class RyuApp(object):
         if name in SERVICE_BRICKS:
             if isinstance(ev, EventRequestBase):
                 ev.src = self.name
-            LOG.debug("EVENT %s->%s %s" %
-                      (self.name, name, ev.__class__.__name__))
+            LOG.debug("EVENT %s->%s %s",
+                      self.name, name, ev.__class__.__name__)
             SERVICE_BRICKS[name]._send_event(ev, state)
         else:
-            LOG.debug("EVENT LOST %s->%s %s" %
-                      (self.name, name, ev.__class__.__name__))
+            LOG.debug("EVENT LOST %s->%s %s",
+                      self.name, name, ev.__class__.__name__)
 
     def send_event_to_observers(self, ev, state=None):
         """
@@ -348,6 +346,10 @@ class AppManager(object):
             hub.joinall(services)
         finally:
             app_mgr.close()
+            for t in services:
+                t.kill()
+            hub.joinall(services)
+            gc.collect()
 
     @staticmethod
     def get_instance():
@@ -379,8 +381,7 @@ class AppManager(object):
         while len(app_lists) > 0:
             app_cls_name = app_lists.pop(0)
 
-            context_modules = map(lambda x: x.__module__,
-                                  self.contexts_cls.values())
+            context_modules = [x.__module__ for x in self.contexts_cls.values()]
             if app_cls_name in context_modules:
                 continue
 
@@ -395,7 +396,6 @@ class AppManager(object):
             services = []
             for key, context_cls in cls.context_iteritems():
                 v = self.contexts_cls.setdefault(key, context_cls)
-
                 assert v == context_cls
                 context_modules.append(context_cls.__module__)
 
@@ -428,27 +428,28 @@ class AppManager(object):
             for _k, m in inspect.getmembers(i, inspect.ismethod):
                 if not hasattr(m, 'callers'):
                     continue
-                for ev_cls, c in m.callers.iteritems():
+                for ev_cls, c in m.callers.items():
                     if not c.ev_source:
                         continue
+
                     brick = _lookup_service_brick_by_mod_name(c.ev_source)
                     if brick:
                         brick.register_observer(ev_cls, i.name,
                                                 c.dispatchers)
 
                     # allow RyuApp and Event class are in different module
-                    for brick in SERVICE_BRICKS.itervalues():
+                    for brick in SERVICE_BRICKS.values():
                         if ev_cls in brick._EVENTS:
                             brick.register_observer(ev_cls, i.name,
                                                     c.dispatchers)
 
     @staticmethod
     def _report_brick(name, app):
-        LOG.debug("BRICK %s" % name)
+        LOG.debug("BRICK %s", name)
         for ev_cls, list_ in app.observers.items():
-            LOG.debug("  PROVIDES %s TO %s" % (ev_cls.__name__, list_))
+            LOG.debug("  PROVIDES %s TO %s", ev_cls.__name__, list_)
         for ev_cls in app.event_handlers.keys():
-            LOG.debug("  CONSUMES %s" % (ev_cls.__name__,))
+            LOG.debug("  CONSUMES %s", ev_cls.__name__)
 
     @staticmethod
     def report_bricks():
@@ -459,7 +460,7 @@ class AppManager(object):
         # for now, only single instance of a given module
         # Do we need to support multiple instances?
         # Yes, maybe for slicing.
-        #LOG.info('instantiating app %s of %s', app_name, cls.__name__)
+        LOG.info('instantiating app %s of %s', app_name, cls.__name__)
 
         if hasattr(cls, 'OFP_VERSIONS') and cls.OFP_VERSIONS is not None:
             ofproto_protocol.set_app_supported_versions(cls.OFP_VERSIONS)
@@ -515,5 +516,7 @@ class AppManager(object):
                 self._close(app)
             close_dict.clear()
 
-        close_all(self.applications)
+        for app_name in list(self.applications.keys()):
+            self.uninstantiate(app_name)
+        assert not self.applications
         close_all(self.contexts)

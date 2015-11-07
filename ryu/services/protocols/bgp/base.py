@@ -262,33 +262,33 @@ class Activity(object):
         # changed size during iteration
         child_activities = self._child_activity_map.items()
         for child_name, child_activity in child_activities:
-            LOG.debug('%s: Stopping child activity %s ' %
-                      (self.name, child_name))
+            LOG.debug('%s: Stopping child activity %s ', self.name, child_name)
             if child_activity.started:
                 child_activity.stop()
 
-    def _stop_child_threads(self):
+    def _stop_child_threads(self, name=None):
         """Stops all threads spawn by this activity.
         """
         child_threads = self._child_thread_map.items()
         for thread_name, thread in child_threads:
-            LOG.debug('%s: Stopping child thread %s' %
-                      (self.name, thread_name))
-            thread.kill()
+            if not name or thread_name is name:
+                LOG.debug('%s: Stopping child thread %s',
+                          self.name, thread_name)
+                thread.kill()
+                self._child_thread_map.pop(thread_name, None)
 
     def _close_asso_sockets(self):
         """Closes all the sockets linked to this activity.
         """
         asso_sockets = self._asso_socket_map.items()
         for sock_name, sock in asso_sockets:
-            LOG.debug('%s: Closing socket %s - %s' %
-                      (self.name, sock_name, sock))
+            LOG.debug('%s: Closing socket %s - %s', self.name, sock_name, sock)
             sock.close()
 
     def _stop_timers(self):
         timers = self._timers.items()
         for timer_name, timer in timers:
-            LOG.debug('%s: Stopping timer %s' % (self.name, timer_name))
+            LOG.debug('%s: Stopping timer %s', self.name, timer_name)
             timer.stop()
 
     def stop(self):
@@ -302,7 +302,7 @@ class Activity(object):
             raise ActivityException(desc='Cannot call stop when activity is '
                                     'not started or has been stopped already.')
 
-        LOG.debug('Stopping activity %s.' % (self.name))
+        LOG.debug('Stopping activity %s.', self.name)
         self._stop_timers()
         self._stop_child_activities()
         self._stop_child_threads()
@@ -314,7 +314,7 @@ class Activity(object):
         self._child_activity_map = weakref.WeakValueDictionary()
         self._child_thread_map = weakref.WeakValueDictionary()
         self._timers = weakref.WeakValueDictionary()
-        LOG.debug('Stopping activity %s finished.' % self.name)
+        LOG.debug('Stopping activity %s finished.', self.name)
 
     def _canonicalize_ip(self, ip):
         addr = netaddr.IPAddress(ip)
@@ -342,7 +342,7 @@ class Activity(object):
             sock, client_address = s.accept()
             client_address, port = self.get_remotename(sock)
             LOG.debug('Connect request received from client for port'
-                      ' %s:%s' % (client_address, port))
+                      ' %s:%s', client_address, port)
             client_name = self.name + '_client@' + client_address
             self._asso_socket_map[client_name] = sock
             self._spawn(client_name, conn_handle, sock)
@@ -375,15 +375,17 @@ class Activity(object):
         server = None
         for sa in listen_sockets.keys():
             name = self.name + '_server@' + str(sa[0])
+            self._asso_socket_map[name] = listen_sockets[sa]
             if count == 0:
                 import eventlet
                 server = eventlet.spawn(self._listen_socket_loop,
                                         listen_sockets[sa], conn_handle)
 
+                self._child_thread_map[name] = server
                 count += 1
             else:
-                self._spawn(name, self._listen_socket_loop,
-                            listen_sockets[sa], conn_handle)
+                server = self._spawn(name, self._listen_socket_loop,
+                                     listen_sockets[sa], conn_handle)
         return server, listen_sockets
 
     def _connect_tcp(self, peer_addr, conn_handler, time_out=None,
@@ -394,8 +396,7 @@ class Activity(object):
         successful, uses the socket instance to start `client_factory`.
         The socket is bound to `bind_address` if specified.
         """
-        LOG.debug('Connect TCP called for %s:%s' % (peer_addr[0],
-                                                    peer_addr[1]))
+        LOG.debug('Connect TCP called for %s:%s', peer_addr[0], peer_addr[1])
         if netaddr.valid_ipv4(peer_addr[0]):
             family = socket.AF_INET
         else:
@@ -527,7 +528,7 @@ def validate(**kwargs):
     If name is not provided we use function name as name of the validator.
     """
     def decorator(func):
-        _VALIDATORS[kwargs.pop('name', func.func_name)] = func
+        _VALIDATORS[kwargs.pop('name', func.__name__)] = func
         return func
 
     return decorator

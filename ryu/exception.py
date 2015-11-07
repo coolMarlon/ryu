@@ -35,15 +35,9 @@ class OFPUnknownVersion(RyuException):
     message = 'unknown version %(version)x'
 
 
-class OXPUnknownVersion(RyuException):
-    message = 'unknown version %(version)x'
-
-
 class OFPMalformedMessage(RyuException):
     message = 'malformed message'
 
-class OXPMalformedMessage(OFPMalformedMessage):
-    pass
 
 class NetworkNotFound(RyuException):
     message = 'no such network id %(network_id)s'

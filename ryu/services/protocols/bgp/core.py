@@ -40,6 +40,7 @@ from ryu.services.protocols.bgp.protocol import Factory
 from ryu.services.protocols.bgp.signals.emit import BgpSignalBus
 from ryu.services.protocols.bgp.speaker import BgpProtocol
 from ryu.services.protocols.bgp.utils.rtfilter import RouteTargetManager
+from ryu.services.protocols.bgp.rtconf.neighbors import CONNECT_MODE_ACTIVE
 from ryu.services.protocols.bgp.utils import stats
 from ryu.services.protocols.bgp.bmp import BMPClient
 from ryu.lib import sockopt
@@ -227,11 +228,13 @@ class CoreService(Factory, Activity):
         server_addr = (CORE_IP, self._common_config.bgp_server_port)
         waiter = kwargs.pop('waiter')
         waiter.set()
-        server_thread, sockets = self._listen_tcp(server_addr,
-                                                  self.start_protocol)
-        self.listen_sockets = sockets
-
-        server_thread.wait()
+        if self._common_config.bgp_server_port != 0:
+            server_thread, sockets = self._listen_tcp(server_addr,
+                                                      self.start_protocol)
+            self.listen_sockets = sockets
+            server_thread.wait()
+        else:
+            self.listen_sockets = {}
         processor_thread.wait()
 
     # ========================================================================
@@ -262,14 +265,13 @@ class CoreService(Factory, Activity):
             # If interested RTs for a peer changes
             if new_rts or old_rts:
                 LOG.debug('RT Filter for peer %s updated: '
-                          'Added RTs %s, Removed Rts %s' %
-                          (peer.ip_address, new_rts, old_rts))
+                          'Added RTs %s, Removed Rts %s',
+                          peer.ip_address, new_rts, old_rts)
                 self._on_update_rt_filter(peer, new_rts, old_rts)
                 # Update to new RT filters
         self._peer_manager.set_peer_to_rtfilter_map(new_peer_to_rtfilter_map)
         self._rt_mgr.peer_to_rtfilter_map = new_peer_to_rtfilter_map
-        LOG.debug('Updated RT filters: %s' %
-                  (str(self._rt_mgr.peer_to_rtfilter_map)))
+        LOG.debug('Updated RT filters: %s', self._rt_mgr.peer_to_rtfilter_map)
         # Update interested RTs i.e. RTs on the path that will be installed
         # into global tables
         self._rt_mgr.update_interested_rts()
@@ -282,14 +284,14 @@ class CoreService(Factory, Activity):
             - `new_rts`: (set) of new RTs that peer is interested in.
             - `old_rts`: (set) of RTs that peers is no longer interested in.
         """
-        for table in self._table_manager._global_tables.itervalues():
+        for table in self._table_manager._global_tables.values():
             if table.route_family == RF_RTC_UC:
                 continue
             self._spawn('rt_filter_chg_%s' % peer,
                         self._rt_mgr.on_rt_filter_chg_sync_peer,
                         peer, new_rts, old_rts, table)
-            LOG.debug('RT Filter change handler launched for route_family %s'
-                      % table.route_family)
+            LOG.debug('RT Filter change handler launched for route_family %s',
+                      table.route_family)
 
     def _compute_rtfilter_map(self):
         """Returns neighbor's RT filter (permit/allow filter based on RT).
@@ -313,7 +315,7 @@ class CoreService(Factory, Activity):
         # Check if we have to use all paths or just best path
         if self._common_config.max_path_ext_rtfilter_all:
             # We have to look at all paths for a RtDest
-            for rtcdest in self._table_manager.get_rtc_table().itervalues():
+            for rtcdest in self._table_manager.get_rtc_table().values():
                 known_path_list = rtcdest.known_path_list
                 for path in known_path_list:
                     neigh = path.source
@@ -328,7 +330,7 @@ class CoreService(Factory, Activity):
             # We iterate over all destination of the RTC table and for iBGP
             # peers we use all known paths' RTs for RT filter and for eBGP
             # peers we only consider best-paths' RTs for RT filter
-            for rtcdest in self._table_manager.get_rtc_table().itervalues():
+            for rtcdest in self._table_manager.get_rtc_table().values():
                 path = rtcdest.best_path
                 # If this destination does not have any path, we continue
                 if not path:
@@ -408,6 +410,7 @@ class CoreService(Factory, Activity):
         assert socket
         # Check if its a reactive connection or pro-active connection
         _, remote_port = self.get_remotename(socket)
+        remote_port = int(remote_port)
         is_reactive_conn = True
         if remote_port == STD_BGP_SERVER_PORT_NUM:
             is_reactive_conn = False
@@ -435,8 +438,17 @@ class CoreService(Factory, Activity):
         #     configuration.
         # 2) If this neighbor is not enabled according to configuration.
         if not peer or not peer.enabled:
-            LOG.debug('Closed connection to %s:%s as it is not a recognized'
-                      ' peer.' % (peer_addr, peer_port))
+            LOG.debug('Closed connection %s %s:%s as it is not a recognized'
+                      ' peer.', 'from' if bgp_proto.is_reactive else 'to',
+                      peer_addr, peer_port)
+            # Send connection rejected notification as per RFC
+            code = BGP_ERROR_CEASE
+            subcode = BGP_ERROR_SUB_CONNECTION_RESET
+            bgp_proto.send_notification(code, subcode)
+        elif bgp_proto.is_reactive and \
+                peer.connect_mode is CONNECT_MODE_ACTIVE:
+            LOG.debug('Closed connection from %s:%s as connect_mode is'
+                      ' configured ACTIVE.', peer_addr, peer_port)
             # Send connection rejected notification as per RFC
             code = BGP_ERROR_CEASE
             subcode = BGP_ERROR_SUB_CONNECTION_RESET
@@ -444,8 +456,8 @@ class CoreService(Factory, Activity):
         elif not (peer.in_idle() or peer.in_active() or peer.in_connect()):
             LOG.debug('Closing connection to %s:%s as we have connection'
                       ' in state other than IDLE or ACTIVE,'
-                      ' i.e. connection resolution' %
-                      (peer_addr, peer_port))
+                      ' i.e. connection resolution',
+                      peer_addr, peer_port)
             # Send Connection Collision Resolution notification as per RFC.
             code = BGP_ERROR_CEASE
             subcode = BGP_ERROR_SUB_CONNECTION_COLLISION_RESOLUTION
@@ -460,8 +472,7 @@ class CoreService(Factory, Activity):
         if (host, port) in self.bmpclients:
             bmpclient = self.bmpclients[(host, port)]
             if bmpclient.started:
-                LOG.warn("bmpclient is already running for %s:%s" % (host,
-                                                                     port))
+                LOG.warn("bmpclient is already running for %s:%s", host, port)
                 return False
         bmpclient = BMPClient(self, host, port)
         self.bmpclients[(host, port)] = bmpclient
@@ -470,7 +481,7 @@ class CoreService(Factory, Activity):
 
     def stop_bmp(self, host, port):
         if (host, port) not in self.bmpclients:
-            LOG.warn("no bmpclient is running for %s:%s" % (host, port))
+            LOG.warn("no bmpclient is running for %s:%s", host, port)
             return False
 
         bmpclient = self.bmpclients[(host, port)]

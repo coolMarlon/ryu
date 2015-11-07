@@ -83,6 +83,11 @@ class WebSocketTopology(app_manager.RyuApp):
         msg = ev.link.to_dict()
         self._rpc_broadcall('event_link_delete', msg)
 
+    @set_ev_cls(event.EventHostAdd)
+    def _event_host_add_handler(self, ev):
+        msg = ev.host.to_dict()
+        self._rpc_broadcall('event_host_add', msg)
+
     def _rpc_broadcall(self, func_name, msg):
         disconnected_clients = []
         for rpc_client in self.rpc_clients:
@@ -92,7 +97,7 @@ class WebSocketTopology(app_manager.RyuApp):
             try:
                 getattr(rpc_server, func_name)(msg)
             except SocketError:
-                self.logger.debug('WebSocket disconnected: %s' % rpc_client.ws)
+                self.logger.debug('WebSocket disconnected: %s', rpc_client.ws)
                 disconnected_clients.append(rpc_client)
             except InvalidReplyError as e:
                 self.logger.error(e)

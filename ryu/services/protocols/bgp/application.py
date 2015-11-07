@@ -19,7 +19,7 @@ import imp
 import logging
 import traceback
 from os import path
-from oslo.config import cfg
+from oslo_config import cfg
 
 from ryu.lib import hub
 from ryu.base.app_manager import RyuApp
@@ -45,9 +45,14 @@ from ryu.services.protocols.bgp.rtconf.common import REFRESH_STALEPATH_TIME
 from ryu.services.protocols.bgp.rtconf.common import ROUTER_ID
 from ryu.services.protocols.bgp.rtconf import neighbors
 from ryu.services.protocols.bgp.rtconf import vrfs
-from ryu.services.protocols.bgp.utils.dictconfig import dictConfig
 from ryu.services.protocols.bgp.utils.validation import is_valid_ipv4
 from ryu.services.protocols.bgp.operator import ssh
+
+try:
+    from logging.config import dictConfig
+except Exception:
+    from ryu.services.protocols.bgp.utils.dictconfig import dictConfig
+
 
 LOG = logging.getLogger('bgpspeaker.application')
 CONF = cfg.CONF
@@ -119,7 +124,7 @@ class RyuBGPSpeaker(RyuApp):
         """
         if not port:
             raise ApplicationException(desc='Invalid rpc port number.')
-        if not isinstance(port, (int, long)) and isinstance(port, str):
+        if isinstance(port, str):
             port = int(port)
 
         return port
@@ -171,7 +176,7 @@ class RyuBGPSpeaker(RyuApp):
         call('core.start', waiter=waiter, **common_settings)
         waiter.wait()
 
-        LOG.debug('Core started %s' % CORE_MANAGER.started)
+        LOG.debug('Core started %s', CORE_MANAGER.started)
         # Core manager started add configured neighbor and vrfs
         if CORE_MANAGER.started:
             # Add neighbors.
@@ -194,7 +199,7 @@ class RyuBGPSpeaker(RyuApp):
             try:
                 bgp_neighbor[neighbors.IP_ADDRESS] = ip
                 call('neighbor.create', **bgp_neighbor)
-                LOG.debug('Added neighbor %s' % ip)
+                LOG.debug('Added neighbor %s', ip)
             except RuntimeConfigError as re:
                 LOG.error(re)
                 LOG.error(traceback.format_exc())
@@ -207,11 +212,11 @@ class RyuBGPSpeaker(RyuApp):
         All valid VRFs are loaded.
         """
         vpns_conf = routing_settings.setdefault('vpns', {})
-        for vrfname, vrf in vpns_conf.iteritems():
+        for vrfname, vrf in vpns_conf.items():
             try:
                 vrf[vrfs.VRF_NAME] = vrfname
                 call('vrf.create', **vrf)
-                LOG.debug('Added vrf  %s' % str(vrf))
+                LOG.debug('Added vrf  %s', vrf)
             except RuntimeConfigError as e:
                 LOG.error(e)
                 continue
@@ -226,7 +231,7 @@ class RyuBGPSpeaker(RyuApp):
         for prefix in networks:
             try:
                 call('network.add', prefix=prefix)
-                LOG.debug('Added network %s' % str(prefix))
+                LOG.debug('Added network %s', prefix)
             except RuntimeConfigError as e:
                 LOG.error(e)
                 continue

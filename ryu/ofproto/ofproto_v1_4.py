@@ -18,6 +18,9 @@
 OpenFlow 1.4 definitions.
 """
 
+from ryu.lib import type_desc
+from ryu.ofproto import nx_match
+from ryu.ofproto import ofproto_utils
 from ryu.ofproto import oxm_fields
 
 from struct import calcsize
@@ -341,56 +344,59 @@ def oxm_tlv_header_extract_hasmask(header):
 
 def oxm_tlv_header_extract_length(header):
     if oxm_tlv_header_extract_hasmask(header):
-        length = (header & 0xff) / 2
+        length = (header & 0xff) // 2
     else:
         length = header & 0xff
     return length
 
 oxm_types = [
-    oxm_fields.OpenFlowBasic('in_port', 0, oxm_fields.Int4),
-    oxm_fields.OpenFlowBasic('in_phy_port', 1, oxm_fields.Int4),
-    oxm_fields.OpenFlowBasic('metadata', 2, oxm_fields.Int8),
-    oxm_fields.OpenFlowBasic('eth_dst', 3, oxm_fields.MacAddr),
-    oxm_fields.OpenFlowBasic('eth_src', 4, oxm_fields.MacAddr),
-    oxm_fields.OpenFlowBasic('eth_type', 5, oxm_fields.Int2),
-    oxm_fields.OpenFlowBasic('vlan_vid', 6, oxm_fields.Int2),
-    oxm_fields.OpenFlowBasic('vlan_pcp', 7, oxm_fields.Int1),
-    oxm_fields.OpenFlowBasic('ip_dscp', 8, oxm_fields.Int1),
-    oxm_fields.OpenFlowBasic('ip_ecn', 9, oxm_fields.Int1),
-    oxm_fields.OpenFlowBasic('ip_proto', 10, oxm_fields.Int1),
-    oxm_fields.OpenFlowBasic('ipv4_src', 11, oxm_fields.IPv4Addr),
-    oxm_fields.OpenFlowBasic('ipv4_dst', 12, oxm_fields.IPv4Addr),
-    oxm_fields.OpenFlowBasic('tcp_src', 13, oxm_fields.Int2),
-    oxm_fields.OpenFlowBasic('tcp_dst', 14, oxm_fields.Int2),
-    oxm_fields.OpenFlowBasic('udp_src', 15, oxm_fields.Int2),
-    oxm_fields.OpenFlowBasic('udp_dst', 16, oxm_fields.Int2),
-    oxm_fields.OpenFlowBasic('sctp_src', 17, oxm_fields.Int2),
-    oxm_fields.OpenFlowBasic('sctp_dst', 18, oxm_fields.Int2),
-    oxm_fields.OpenFlowBasic('icmpv4_type', 19, oxm_fields.Int1),
-    oxm_fields.OpenFlowBasic('icmpv4_code', 20, oxm_fields.Int1),
-    oxm_fields.OpenFlowBasic('arp_op', 21, oxm_fields.Int2),
-    oxm_fields.OpenFlowBasic('arp_spa', 22, oxm_fields.IPv4Addr),
-    oxm_fields.OpenFlowBasic('arp_tpa', 23, oxm_fields.IPv4Addr),
-    oxm_fields.OpenFlowBasic('arp_sha', 24, oxm_fields.MacAddr),
-    oxm_fields.OpenFlowBasic('arp_tha', 25, oxm_fields.MacAddr),
-    oxm_fields.OpenFlowBasic('ipv6_src', 26, oxm_fields.IPv6Addr),
-    oxm_fields.OpenFlowBasic('ipv6_dst', 27, oxm_fields.IPv6Addr),
-    oxm_fields.OpenFlowBasic('ipv6_flabel', 28, oxm_fields.Int4),
-    oxm_fields.OpenFlowBasic('icmpv6_type', 29, oxm_fields.Int1),
-    oxm_fields.OpenFlowBasic('icmpv6_code', 30, oxm_fields.Int1),
-    oxm_fields.OpenFlowBasic('ipv6_nd_target', 31, oxm_fields.IPv6Addr),
-    oxm_fields.OpenFlowBasic('ipv6_nd_sll', 32, oxm_fields.MacAddr),
-    oxm_fields.OpenFlowBasic('ipv6_nd_tll', 33, oxm_fields.MacAddr),
-    oxm_fields.OpenFlowBasic('mpls_label', 34, oxm_fields.Int4),
-    oxm_fields.OpenFlowBasic('mpls_tc', 35, oxm_fields.Int1),
-    oxm_fields.OpenFlowBasic('mpls_bos', 36, oxm_fields.Int1),
-    oxm_fields.OpenFlowBasic('pbb_isid', 37, oxm_fields.Int3),
-    oxm_fields.OpenFlowBasic('tunnel_id', 38, oxm_fields.Int8),
-    oxm_fields.OpenFlowBasic('ipv6_exthdr', 39, oxm_fields.Int2),
-    oxm_fields.OpenFlowBasic('pbb_uca', 41, oxm_fields.Int1),
-    oxm_fields.NiciraExtended1('tun_ipv4_src', 31, oxm_fields.IPv4Addr),
-    oxm_fields.NiciraExtended1('tun_ipv4_dst', 32, oxm_fields.IPv4Addr),
-]
+    oxm_fields.OpenFlowBasic('in_port', 0, type_desc.Int4),
+    oxm_fields.OpenFlowBasic('in_phy_port', 1, type_desc.Int4),
+    oxm_fields.OpenFlowBasic('metadata', 2, type_desc.Int8),
+    oxm_fields.OpenFlowBasic('eth_dst', 3, type_desc.MacAddr),
+    oxm_fields.OpenFlowBasic('eth_src', 4, type_desc.MacAddr),
+    oxm_fields.OpenFlowBasic('eth_type', 5, type_desc.Int2),
+    oxm_fields.OpenFlowBasic('vlan_vid', 6, type_desc.Int2),
+    oxm_fields.OpenFlowBasic('vlan_pcp', 7, type_desc.Int1),
+    oxm_fields.OpenFlowBasic('ip_dscp', 8, type_desc.Int1),
+    oxm_fields.OpenFlowBasic('ip_ecn', 9, type_desc.Int1),
+    oxm_fields.OpenFlowBasic('ip_proto', 10, type_desc.Int1),
+    oxm_fields.OpenFlowBasic('ipv4_src', 11, type_desc.IPv4Addr),
+    oxm_fields.OpenFlowBasic('ipv4_dst', 12, type_desc.IPv4Addr),
+    oxm_fields.OpenFlowBasic('tcp_src', 13, type_desc.Int2),
+    oxm_fields.OpenFlowBasic('tcp_dst', 14, type_desc.Int2),
+    oxm_fields.OpenFlowBasic('udp_src', 15, type_desc.Int2),
+    oxm_fields.OpenFlowBasic('udp_dst', 16, type_desc.Int2),
+    oxm_fields.OpenFlowBasic('sctp_src', 17, type_desc.Int2),
+    oxm_fields.OpenFlowBasic('sctp_dst', 18, type_desc.Int2),
+    oxm_fields.OpenFlowBasic('icmpv4_type', 19, type_desc.Int1),
+    oxm_fields.OpenFlowBasic('icmpv4_code', 20, type_desc.Int1),
+    oxm_fields.OpenFlowBasic('arp_op', 21, type_desc.Int2),
+    oxm_fields.OpenFlowBasic('arp_spa', 22, type_desc.IPv4Addr),
+    oxm_fields.OpenFlowBasic('arp_tpa', 23, type_desc.IPv4Addr),
+    oxm_fields.OpenFlowBasic('arp_sha', 24, type_desc.MacAddr),
+    oxm_fields.OpenFlowBasic('arp_tha', 25, type_desc.MacAddr),
+    oxm_fields.OpenFlowBasic('ipv6_src', 26, type_desc.IPv6Addr),
+    oxm_fields.OpenFlowBasic('ipv6_dst', 27, type_desc.IPv6Addr),
+    oxm_fields.OpenFlowBasic('ipv6_flabel', 28, type_desc.Int4),
+    oxm_fields.OpenFlowBasic('icmpv6_type', 29, type_desc.Int1),
+    oxm_fields.OpenFlowBasic('icmpv6_code', 30, type_desc.Int1),
+    oxm_fields.OpenFlowBasic('ipv6_nd_target', 31, type_desc.IPv6Addr),
+    oxm_fields.OpenFlowBasic('ipv6_nd_sll', 32, type_desc.MacAddr),
+    oxm_fields.OpenFlowBasic('ipv6_nd_tll', 33, type_desc.MacAddr),
+    oxm_fields.OpenFlowBasic('mpls_label', 34, type_desc.Int4),
+    oxm_fields.OpenFlowBasic('mpls_tc', 35, type_desc.Int1),
+    oxm_fields.OpenFlowBasic('mpls_bos', 36, type_desc.Int1),
+    oxm_fields.OpenFlowBasic('pbb_isid', 37, type_desc.Int3),
+    oxm_fields.OpenFlowBasic('tunnel_id', 38, type_desc.Int8),
+    oxm_fields.OpenFlowBasic('ipv6_exthdr', 39, type_desc.Int2),
+    oxm_fields.OpenFlowBasic('pbb_uca', 41, type_desc.Int1),
+    # EXT-109 TCP flags match field Extension
+    oxm_fields.ONFExperimenter('tcp_flags', 42, type_desc.Int2),
+    # EXT-233 Output match Extension
+    # NOTE(yamamoto): The spec says uint64_t but I assume it's an error.
+    oxm_fields.ONFExperimenter('actset_output', 43, type_desc.Int4),
+] + nx_match.oxm_types
 
 oxm_fields.generate(__name__)
 
@@ -849,7 +855,7 @@ OFPQOFC_EPERM = 2           # Permissions error.
 # enum ofp_switch_config_failed_code
 OFPSCFC_BAD_FLAGS = 0       # Specified flags is invalid.
 OFPSCFC_BAD_LEN = 1         # Specified len is invalid.
-OFPQCFC_EPERM = 2           # Permissions error.
+OFPSCFC_EPERM = 2           # Permissions error.
 
 # enum ofp_role_request_failed_code
 OFPRRFC_STALE = 0           # Stale Message: old generation_id.
@@ -1152,11 +1158,6 @@ OFP_BUCKET_COUNTER_PACK_STR = '!QQ'
 OFP_BUCKET_COUNTER_SIZE = 16
 assert calcsize(OFP_BUCKET_COUNTER_PACK_STR) == OFP_BUCKET_COUNTER_SIZE
 
-# struct ofp_group_desc_stats
-OFP_GROUP_DESC_STATS_PACK_STR = '!HBxI'
-OFP_GROUP_DESC_STATS_SIZE = 8
-assert calcsize(OFP_GROUP_DESC_STATS_PACK_STR) == OFP_GROUP_DESC_STATS_SIZE
-
 # struct ofp_group_stats
 OFP_GROUP_STATS_PACK_STR = '!H2xII4xQQII'
 OFP_GROUP_STATS_SIZE = 40
@@ -1166,6 +1167,12 @@ assert calcsize(OFP_GROUP_STATS_PACK_STR) == OFP_GROUP_STATS_SIZE
 OFP_GROUP_DESC_PACK_STR = '!HBxI'
 OFP_GROUP_DESC_SIZE = 8
 assert calcsize(OFP_GROUP_DESC_PACK_STR) == OFP_GROUP_DESC_SIZE
+
+# struct ofp_group_desc_stats
+# Backward compatibility with 1.3.1 - avoid breaking the API.
+OFP_GROUP_DESC_STATS_PACK_STR = OFP_GROUP_DESC_PACK_STR
+OFP_GROUP_DESC_STATS_SIZE = OFP_GROUP_DESC_SIZE
+assert calcsize(OFP_GROUP_DESC_STATS_PACK_STR) == OFP_GROUP_DESC_STATS_SIZE
 
 # enum ofp_group_capabilities
 OFPGFC_SELECT_WEIGHT = 1 << 0       # Support weight for select groups.
@@ -1469,6 +1476,18 @@ OFP_BUNDLE_ADD_MSG_PACK_STR = (OFP_BUNDLE_ADD_MSG_0_PACK_STR +
 OFP_BUNDLE_ADD_MSG_SIZE = 24
 assert (calcsize(OFP_BUNDLE_ADD_MSG_PACK_STR) + OFP_HEADER_SIZE ==
         OFP_BUNDLE_ADD_MSG_SIZE)
+
+# Note: struct ofp_prop_experimenter is specific to this implementation.
+# It does not have a corresponding structure in the specification.
+# This structure defines common structure for ofp_*_prop_experimenter.
+# struct ofp_prop_experimenter
+OFP_PROP_EXPERIMENTER_PACK_STR = '!HHII'
+OFP_PROP_EXPERIMENTER_SIZE = 12
+assert (calcsize(OFP_PROP_EXPERIMENTER_PACK_STR) ==
+        OFP_PROP_EXPERIMENTER_SIZE)
+
+# generate utility methods
+ofproto_utils.generate(__name__)
 
 # define constants
 OFP_VERSION = 0x05

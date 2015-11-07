@@ -14,26 +14,32 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import six
+
 import base64
 import collections
 import logging
 import struct
-import sys
 import functools
 
 from ryu import exception
 from ryu import utils
 from ryu.lib import stringify
 
-from . import ofproto_common
+from ryu.ofproto import ofproto_common
 
 LOG = logging.getLogger('ryu.ofproto.ofproto_parser')
+
+# This is merely for API compatibility on python2
+if six.PY3:
+    buffer = bytes
 
 
 def header(buf):
     assert len(buf) >= ofproto_common.OFP_HEADER_SIZE
     # LOG.debug('len %d bufsize %d', len(buf), ofproto.OFP_HEADER_SIZE)
-    return struct.unpack_from(ofproto_common.OFP_HEADER_PACK_STR, buffer(buf))
+    return struct.unpack_from(ofproto_common.OFP_HEADER_PACK_STR,
+                              six.binary_type(buf))
 
 
 _MSG_PARSERS = {}
@@ -52,8 +58,6 @@ def msg(datapath, version, msg_type, msg_len, xid, buf):
     msg_parser = _MSG_PARSERS.get(version)
     if msg_parser is None:
         raise exception.OFPUnknownVersion(version=version)
-
-    return msg_parser(datapath, version, msg_type, msg_len, xid, buf)
 
     try:
         return msg_parser(datapath, version, msg_type, msg_len, xid, buf)
@@ -106,14 +110,14 @@ def ofp_msg_from_jsondict(dp, jsondict):
     """
     parser = dp.ofproto_parser
     assert len(jsondict) == 1
-    for k, v in jsondict.iteritems():
+    for k, v in jsondict.items():
         cls = getattr(parser, k)
         assert issubclass(cls, MsgBase)
         return cls.from_jsondict(v, datapath=dp)
 
 
 class StringifyMixin(stringify.StringifyMixin):
-    _class_prefixes = ["OFP", "ONF", "MT"]
+    _class_prefixes = ["OFP", "ONF", "MT", "NX"]
 
     @classmethod
     def cls_from_jsondict_key(cls, k):
@@ -165,9 +169,11 @@ class MsgBase(StringifyMixin):
         self.buf = buffer(buf)
 
     def __str__(self):
-        buf = 'version: 0x%x msg_type 0x%x xid 0x%x ' % (self.version,
-                                                         self.msg_type,
-                                                         self.xid)
+        def hexify(x):
+            return hex(x) if isinstance(x, int) else x
+        buf = 'version=%s,msg_type=%s,msg_len=%s,xid=%s,' %\
+              (hexify(self.version), hexify(self.msg_type),
+               hexify(self.msg_len), hexify(self.xid))
         return buf + StringifyMixin.__str__(self)
 
     @classmethod
@@ -212,21 +218,6 @@ class MsgInMsgBase(MsgBase):
                       **additional_args):
         return cls._get_decoder(k, decode_string)(json_value,
                                                   **additional_args)
-
-
-def msg_pack_into(fmt, buf, offset, *args):
-    if len(buf) < offset:
-        buf += bytearray(offset - len(buf))
-
-    if len(buf) == offset:
-        buf += struct.pack(fmt, *args)
-        return
-
-    needed_len = offset + struct.calcsize(fmt)
-    if len(buf) < needed_len:
-        buf += bytearray(needed_len - len(buf))
-
-    struct.pack_into(fmt, buf, offset, *args)
 
 
 def namedtuple(typename, fields, **kwargs):

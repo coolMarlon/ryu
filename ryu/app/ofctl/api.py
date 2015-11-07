@@ -16,8 +16,10 @@
 
 # client for ryu.app.ofctl.service
 
+import numbers
+
 from ryu.base import app_manager
-import event
+from . import event
 
 
 def get_datapath(app, dpid):
@@ -29,7 +31,7 @@ def get_datapath(app, dpid):
 
     Returns None on error.
     """
-    assert isinstance(dpid, (int, long))
+    assert isinstance(dpid, numbers.Integral)
     return app.send_request(event.GetDatapathRequest(dpid=dpid))()
 
 

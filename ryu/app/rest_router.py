@@ -15,6 +15,7 @@
 
 
 import logging
+import numbers
 import socket
 import struct
 
@@ -410,7 +411,7 @@ class RouterController(ControllerBase):
     def _access_router(self, switch_id, vlan_id, func, rest_param):
         rest_message = []
         routers = self._get_router(switch_id)
-        param = eval(rest_param) if rest_param else {}
+        param = json.loads(rest_param) if rest_param else {}
         for router in routers.values():
             function = getattr(router, func)
             data = function(vlan_id, param, self.waiters)
@@ -481,7 +482,7 @@ class Router(dict):
         vlan_routers = []
 
         if vlan_id == REST_ALL:
-            vlan_routers = self.values()
+            vlan_routers = list(self.values())
         else:
             vlan_id = int(vlan_id)
             if (vlan_id != VLANID_NONE and
@@ -1875,7 +1876,7 @@ def ipv4_apply_mask(address, prefix_len, err_msg=None):
 
 
 def ipv4_int_to_text(ip_int):
-    assert isinstance(ip_int, (int, long))
+    assert isinstance(ip_int, numbers.Integral)
     return addrconv.ipv4.bin_to_text(struct.pack('!I', ip_int))
 
 

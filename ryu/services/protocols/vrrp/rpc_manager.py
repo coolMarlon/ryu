@@ -62,11 +62,11 @@ class RpcVRRPManager(app_manager.RyuApp):
             error = None
             result = None
             try:
-                if target_method == "vrrp_config":
+                if target_method == b'vrrp_config':
                     result = self._config(msgid, params)
-                elif target_method == "vrrp_list":
+                elif target_method == b'vrrp_list':
                     result = self._list(msgid, params)
-                elif target_method == "vrrp_config_change":
+                elif target_method == b'vrrp_config_change':
                     result = self._config_change(msgid, params)
                 else:
                     error = 'Unknown method %s' % (target_method)
@@ -129,6 +129,8 @@ class RpcVRRPManager(app_manager.RyuApp):
                                               'preempt_delay',
                                               'statistics_interval'))
         try:
+            ip_addr = config_params.pop('ip_addresses')
+            config_params['ip_addresses'] = [ip_addr]
             config = vrrp_event.VRRPConfig(**config_params)
         except:
             raise RPCError('parameters are invalid, %s' % (str(param_dict)))

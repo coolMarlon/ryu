@@ -94,9 +94,9 @@ def from_inet_ptoi(bgp_id):
     four_byte_id = None
     try:
         packed_byte = socket.inet_pton(socket.AF_INET, bgp_id)
-        four_byte_id = long(packed_byte.encode('hex'), 16)
+        four_byte_id = int(packed_byte.encode('hex'), 16)
     except ValueError:
-        LOG.debug('Invalid bgp id given for conversion to integer value %s' %
+        LOG.debug('Invalid bgp id given for conversion to integer value %s',
                   bgp_id)
 
     return four_byte_id
@@ -110,7 +110,7 @@ def get_unknow_opttrans_attr(path):
     """
     path_attrs = path.pathattr_map
     unknown_opt_tran_attrs = {}
-    for _, attr in path_attrs.iteritems():
+    for _, attr in path_attrs.items():
         if (isinstance(attr, BGPPathAttributeUnknown) and
                 attr.is_optional_transitive()):
             unknown_opt_tran_attrs[attr.type_code] = attr

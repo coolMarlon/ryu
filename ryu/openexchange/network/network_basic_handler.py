@@ -56,9 +56,9 @@ class Network_Basic_Handler(app_manager.RyuApp):
         else:
             # src doesn't belong to domain
             # send it back to datapath's flow table.
-            print "send back to datapath: ", ip_src
-            utils.send_packet_out(datapath, msg.buffer_id, 
-                msg.match['in_port'], OFPP_TABLE, msg.data)
+            # print "send back to datapath: ", ip_src
+            utils.send_packet_out(datapath, msg.buffer_id,
+                                  msg.match['in_port'], OFPP_TABLE, msg.data)
             return
         if dst_location:
             dst_sw = dst_location[0]
