@@ -232,7 +232,9 @@ def oxp_install_flow(domains, link2port, access_table,
         if port_pair is None:
             return
         out_port = port_pair[0]
-        # oxp_send_packet_out(first_node, msg, in_port, out_port)
+        # Actually, we should not send packet out to last domain.
+        # For ensuring the pingall success.
+        oxp_send_packet_out(first_node, msg, in_port, out_port)
         oxp_send_flow_mod(first_node, dp, flow_info, in_port, out_port)
 
         # the last flow entry
