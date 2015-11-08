@@ -6,8 +6,8 @@ Open eXchange Protocol(OXP) enable the multi-controller work together.
 
 There are two types of SDN controller:
 
-    * Super Controller(SC)
-    * Domain Controller(DC)
+* Super Controller(SC)
+* Domain Controller(DC)
 
 ###Get OXP
 
@@ -29,28 +29,28 @@ You can config OXP deployment by OXP_CFG.py.
 
 ###Implementation
 
-    * create user:group for oxp.
-    * sudo permission
-        enable use of OXP can using sudo without password. sudo visudo, and add info below.
+* create user:group for oxp.
+* sudo permission
+    enable use of OXP can using sudo without password. sudo visudo, and add info below.
 
-            oxp ALL=(ALL) NOPASSWD:ALL
+        oxp ALL=(ALL) NOPASSWD:ALL
 
-    * send ssh public keys
+* send ssh public keys
 
-            python send_ssh_key.py
+        python send_ssh_key.py
 
-    * Install OXP
-        Using git pull is a recommand way. It will be changed soon.
+* Install OXP
+    Using git pull is a recommand way. It will be changed soon.
 
-            python oxp_install.py
+        python oxp_install.py
 
-    * deploy OXP
+* deploy OXP
 
-            python deploy.py
+        python deploy.py
 
 ###Test
 
-    You can modify /openexchange/test/multi_network.py to test Open eXchange Protocol.
+You can modify /openexchange/test/multi_network.py to test Open eXchange Protocol.
 
 
 
