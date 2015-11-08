@@ -64,5 +64,5 @@ Multi-controller
 
 Open eXchange Protocol can support Multi-controllers work together.
 
-More infomation coming soon.
+More infomation is coming soon.
 
