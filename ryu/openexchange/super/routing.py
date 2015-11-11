@@ -88,6 +88,7 @@ class Routing(app_manager.RyuApp):
     @set_ev_cls(oxp_event.EventOXPTrafficStateChange, MAIN_DISPATCHER)
     def reflesh_bw_graph(self, ev):
         self.graph = self.get_bw_graph(self.graph, self.topology.links)
+        self.get_path(self.graph, None, ev.domain.flags)
 
     def get_path(self, graph, src, flags):
         function = None
@@ -149,7 +150,7 @@ class Routing(app_manager.RyuApp):
         if self.paths:
             if dst_domain:
                 path = self.paths[src_domain][dst_domain]
-                self.logger.debug("Path[%s-->%s]:%s" % (ip_src, ip_dst, path))
+                self.logger.info("Path[%s-->%s]:%s" % (ip_src, ip_dst, path))
 
                 access_table = {}
                 for domain_id in self.location.locations:

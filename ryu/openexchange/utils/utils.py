@@ -142,7 +142,11 @@ def install_flow(datapaths, link2port, access_table, path,
     if len(path) > 1:
         # the last flow entry: tor -> host
         last_dp = datapaths[path[-1]]
-        src_port = get_link2port(link2port, path[-2], path[-1])[1]
+        port_pair = get_link2port(link2port, path[-2], path[-1])
+        if port_pair:
+            src_port = port_pair[1]
+        else:
+            return
         dst_port = get_port(flow_info[2], access_table)
         if dst_port is None:
             assert outer_port
@@ -152,7 +156,10 @@ def install_flow(datapaths, link2port, access_table, path,
 
         # the first flow entry
         port_pair = get_link2port(link2port, path[0], path[1])
-        out_port = port_pair[0]
+        if port_pair:
+            out_port = port_pair[0]
+        else:
+            return
         send_flow_mod(first_dp, flow_info, in_port, out_port)
         send_flow_mod(first_dp, reverse_flow_info, out_port, in_port)
         send_barrier_request(last_dp)

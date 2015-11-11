@@ -84,7 +84,7 @@ class Topology(app_manager.RyuApp):
 
         if check_model_is_bw():
             event = oxp_event.EventOXPTrafficStateChange(
-                traffic=None)
+                traffic=None, domain=domain)
             self.oxp_brick.send_event_to_observers(event, MAIN_DISPATCHER)
 
     @set_ev_cls(oxp_event.EventOXPHostReply, MAIN_DISPATCHER)

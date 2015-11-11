@@ -51,6 +51,24 @@ def get_intra_length(topo, pre, curr, next):
     return 0
 
 
+def get_intra_bw(topo, pre, curr, next):
+    if pre == curr or curr == next:
+        return OXP_MAX_CAPACITY
+    if (pre, curr) in topo.links:
+        src_port = topo.links[(pre, curr)][1]
+        if (curr, next) in topo.links:
+            dst_port = topo.links[(curr, next)][0]
+            if curr in topo.domains:
+                if (src_port, dst_port) in topo.domains[curr].links:
+                    intra_bw = topo.domains[curr].links[(src_port, dst_port)]
+                    return intra_bw
+                else:
+                    LOG.debug("[%s]:%s->%s not found" % (
+                        curr, src_port, dst_port))
+                    return OXP_MAX_CAPACITY
+    return 0
+
+
 def full_floyd_dict(graph, src=None, topo=None):
     _graph = copy.deepcopy(graph)
     path = {}
@@ -146,13 +164,13 @@ def get_min_bw_of_inter_links(path, topo, min_bw):
         minimal_band_width = min_bw
         for i in xrange(_len-2):
             pre, curr, next = path[i], path[i+1], path[i+2]
-            intra_bw = get_intra_length(topo, pre, curr, next)
-            minimal_band_width = min(intra_bw, min_bw)
+            intra_bw = get_intra_bw(topo, pre, curr, next)
+            minimal_band_width = min(intra_bw, minimal_band_width)
         return minimal_band_width
-    return None
+    return min_bw
 
 
-def get_min_bw_of_intra_links(graph, path, min_bw):
+def get_min_bw_of_links(graph, path, min_bw):
     _len = len(path)
     if _len > 1:
         minimal_band_width = min_bw
@@ -160,36 +178,62 @@ def get_min_bw_of_intra_links(graph, path, min_bw):
             pre, curr = path[i], path[i+1]
             if 'bandwidth' in graph[pre][curr]:
                 bw = graph[pre][curr]['bandwidth']
-                minimal_band_width = min(bw, min_bw)
+                minimal_band_width = min(bw, minimal_band_width)
             else:
                 continue
         return minimal_band_width
-    return None
+    return min_bw
 
 
 def band_width_compare(graph, paths, best_paths, topo=None):
     capabilities = {}
-    for src in paths:
-        for dst in paths[src]:
-            if src == dst:
-                best_paths[src][src] = [src]
-                capabilities.setdefault(src, {src: OXP_MAX_CAPACITY})
-                capabilities[src][src] = OXP_MAX_CAPACITY
-                continue
-            max_bw_of_paths = 0
-            best_path = paths[src][dst][0]
-            for path in paths[src][dst]:
-                min_bw = OXP_MAX_CAPACITY
-                min_bw = get_min_bw_of_intra_links(graph, path, min_bw)
-                if topo is not None and CONF.oxp_flags == OXP_ADVANCED_BW:
-                    min_bw = get_min_bw_of_inter_links(path, topo, min_bw)
-                if min_bw > max_bw_of_paths:
-                    max_bw_of_paths = min_bw
-                    best_path = path
+    if CONF.oxp_role == 'domain':
+        for src in paths:
+            for dst in paths[src]:
+                if src == dst:
+                    best_paths[src][src] = [src]
+                    capabilities.setdefault(src, {src: OXP_MAX_CAPACITY})
+                    capabilities[src][src] = OXP_MAX_CAPACITY
+                    continue
+                max_bw_of_paths = 0
+                best_path = paths[src][dst][0]
+                for path in paths[src][dst]:
+                    min_bw = OXP_MAX_CAPACITY
+                    min_bw = get_min_bw_of_links(graph, path, min_bw)
+                    if min_bw > max_bw_of_paths:
+                        max_bw_of_paths = min_bw
+                        best_path = path
+                        print "min_bw: ", min_bw
+                        print "best_path: ", path
 
-            best_paths[src][dst] = best_path
-            capabilities.setdefault(src, {dst: max_bw_of_paths})
-            capabilities[src][dst] = max_bw_of_paths
+                best_paths[src][dst] = best_path
+                capabilities.setdefault(src, {dst: max_bw_of_paths})
+                capabilities[src][dst] = max_bw_of_paths
+    elif CONF.oxp_role == 'super':
+        for src in paths:
+            for dst in paths[src]:
+                if src == dst:
+                    best_paths[src][src] = [src]
+                    capabilities.setdefault(src, {src: OXP_MAX_CAPACITY})
+                    capabilities[src][src] = OXP_MAX_CAPACITY
+                    continue
+                max_bw_of_paths = 0
+                best_path = paths[src][dst][0]
+                for path in paths[src][dst]:
+                    min_bw = OXP_MAX_CAPACITY
+                    min_bw = get_min_bw_of_links(graph, path, min_bw)
+                    if topo is not None and CONF.oxp_flags == OXP_ADVANCED_BW:
+                        min_bw = get_min_bw_of_inter_links(path, topo, min_bw)
+                    if min_bw > max_bw_of_paths:
+                        max_bw_of_paths = min_bw
+                        best_path = path
+                        if (src, dst) == (1, 2) or (src, dst) == (2, 1):
+                            print "min_bw: ", min_bw
+                            print "best_path: ", path
+
+                best_paths[src][dst] = best_path
+                capabilities.setdefault(src, {dst: max_bw_of_paths})
+                capabilities[src][dst] = max_bw_of_paths
     return capabilities, best_paths
 
 
@@ -217,6 +261,9 @@ def best_paths_by_bw(graph, src=None, topo=None):
     # find best path by comparing bandwidth.
     capabilities, best_paths = band_width_compare(_graph, paths,
                                                   best_paths, topo)
+    #if CONF.oxp_role == 'super':
+    #    print paths, '\n', best_paths
+
     return capabilities, best_paths, paths
 
 

@@ -26,6 +26,8 @@ def multiControllerNet(con_num=7, sw_num=35, host_num=70):
     switch_list = []
     host_list = []
 
+    inter_bw = 500
+
     logger = logging.getLogger('ryu.openexchange.test.multi_network')
 
     net = Mininet(controller=None,
@@ -60,32 +62,32 @@ def multiControllerNet(con_num=7, sw_num=35, host_num=70):
 
     # 0-4  5-9 10-14 15-19 20-24 25-29 30-34
     # domain1 -> others
-    net.addLink(switch_list[4], switch_list[6])
-    net.addLink(switch_list[4], switch_list[10])
-    net.addLink(switch_list[1], switch_list[20])
+    net.addLink(switch_list[4], switch_list[6], bw=inter_bw)
+    net.addLink(switch_list[4], switch_list[10], bw=inter_bw)
+    net.addLink(switch_list[1], switch_list[20], bw=inter_bw)
 
     # domain2 -> others
-    net.addLink(switch_list[6], switch_list[10])
-    net.addLink(switch_list[8], switch_list[12])
-    net.addLink(switch_list[7], switch_list[25])
+    net.addLink(switch_list[6], switch_list[10], bw=inter_bw)
+    net.addLink(switch_list[8], switch_list[12], bw=inter_bw)
+    net.addLink(switch_list[7], switch_list[25], bw=inter_bw)
 
     # domain3 -> others
-    net.addLink(switch_list[10], switch_list[16])
-    net.addLink(switch_list[12], switch_list[16])
-    net.addLink(switch_list[12], switch_list[27])
+    net.addLink(switch_list[10], switch_list[16], bw=inter_bw)
+    net.addLink(switch_list[12], switch_list[16], bw=inter_bw)
+    net.addLink(switch_list[12], switch_list[27], bw=inter_bw)
 
     # domain4 -> others
-    net.addLink(switch_list[16], switch_list[21])
-    net.addLink(switch_list[18], switch_list[27])
-    net.addLink(switch_list[19], switch_list[34])
+    net.addLink(switch_list[16], switch_list[21], bw=inter_bw)
+    net.addLink(switch_list[18], switch_list[27], bw=inter_bw)
+    net.addLink(switch_list[19], switch_list[34], bw=inter_bw)
 
     # domain5 -> others
-    net.addLink(switch_list[21], switch_list[27])
-    net.addLink(switch_list[23], switch_list[31])
+    net.addLink(switch_list[21], switch_list[27], bw=inter_bw)
+    net.addLink(switch_list[23], switch_list[31], bw=inter_bw)
 
     # domain6 -> others
-    net.addLink(switch_list[25], switch_list[31])
-    net.addLink(switch_list[27], switch_list[32])
+    net.addLink(switch_list[25], switch_list[31], bw=inter_bw)
+    net.addLink(switch_list[27], switch_list[32], bw=inter_bw)
 
     #domain7 has not need to add links.
 
