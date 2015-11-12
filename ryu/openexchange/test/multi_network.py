@@ -64,30 +64,30 @@ def multiControllerNet(con_num=7, sw_num=35, host_num=70):
     # domain1 -> others
     net.addLink(switch_list[4], switch_list[6], bw=inter_bw)
     net.addLink(switch_list[4], switch_list[10], bw=inter_bw)
-    net.addLink(switch_list[1], switch_list[20], bw=inter_bw)
+    #net.addLink(switch_list[1], switch_list[20], bw=inter_bw)
 
     # domain2 -> others
-    net.addLink(switch_list[6], switch_list[10], bw=inter_bw)
-    net.addLink(switch_list[8], switch_list[12], bw=inter_bw)
-    net.addLink(switch_list[7], switch_list[25], bw=inter_bw)
+    #net.addLink(switch_list[6], switch_list[10], bw=inter_bw)
+    #net.addLink(switch_list[8], switch_list[12], bw=inter_bw)
+    net.addLink(switch_list[7], switch_list[18], bw=inter_bw)
 
     # domain3 -> others
     net.addLink(switch_list[10], switch_list[16], bw=inter_bw)
-    net.addLink(switch_list[12], switch_list[16], bw=inter_bw)
-    net.addLink(switch_list[12], switch_list[27], bw=inter_bw)
+    #net.addLink(switch_list[12], switch_list[16], bw=inter_bw)
+    #net.addLink(switch_list[12], switch_list[27], bw=inter_bw)
 
     # domain4 -> others
-    net.addLink(switch_list[16], switch_list[21], bw=inter_bw)
-    net.addLink(switch_list[18], switch_list[27], bw=inter_bw)
-    net.addLink(switch_list[19], switch_list[34], bw=inter_bw)
+    #net.addLink(switch_list[16], switch_list[21], bw=inter_bw)
+    #net.addLink(switch_list[18], switch_list[27], bw=inter_bw)
+    #net.addLink(switch_list[19], switch_list[34], bw=inter_bw)
 
     # domain5 -> others
-    net.addLink(switch_list[21], switch_list[27], bw=inter_bw)
-    net.addLink(switch_list[23], switch_list[31], bw=inter_bw)
+    #net.addLink(switch_list[21], switch_list[27], bw=inter_bw)
+    #net.addLink(switch_list[23], switch_list[31], bw=inter_bw)
 
     # domain6 -> others
-    net.addLink(switch_list[25], switch_list[31], bw=inter_bw)
-    net.addLink(switch_list[27], switch_list[32], bw=inter_bw)
+    #net.addLink(switch_list[25], switch_list[31], bw=inter_bw)
+    #net.addLink(switch_list[27], switch_list[32], bw=inter_bw)
 
     #domain7 has not need to add links.
 
@@ -103,10 +103,6 @@ def multiControllerNet(con_num=7, sw_num=35, host_num=70):
 
     logger.info("*** Setting OpenFlow version")
 
-    for sw in switch_list:
-        cmd = "sudo ovs-vsctl set bridge %s protocols=OpenFlow13" % sw
-        os.system(cmd)
-
     logger.info("*** Running CLI")
     CLI(net)
 
@@ -115,4 +111,4 @@ def multiControllerNet(con_num=7, sw_num=35, host_num=70):
 
 if __name__ == '__main__':
     setLogLevel('info')
-    multiControllerNet(con_num=7, sw_num=35, host_num=70)
+    multiControllerNet(con_num=4, sw_num=20, host_num=40)

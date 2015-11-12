@@ -55,7 +55,7 @@ class Domain(data_base.DataBase):
                 if msg.vport_no in key:
                     del self.links[key]
 
-    def update_link(self, domain, links):
+    def update_link(self, links):
         for i in links:
             capability = int(i.capability, 16)   # Default way.
             self.links[(i.src_vport, i.dst_vport)] = capability
@@ -63,6 +63,7 @@ class Domain(data_base.DataBase):
 
             self.ports.add((i.src_vport, oxproto_v1_0.OXPPS_LIVE))
             self.ports.add((i.dst_vport, oxproto_v1_0.OXPPS_LIVE))
+        print "domain:", self.domain_id, self.links
         return self.links
 
 
@@ -112,12 +113,17 @@ class Super_Topo(data_base.DataBase):
     def refresh_inter_links_capabilities(self):
         if check_model_is_bw():
             # reflesh the inter-links' bandwidth.
+            # bug!!! error bw data.
+
+            for domain in self.domains.values():
+                print "doid: ", domain.domain_id, domain.links
+
             for link in self.links:
                 src, dst = link
                 src_port, dst_port, cap = self.links[link]
-                if (src_port, src_port) in self.domains[src].links and \
-                        (dst_port, dst_port) in self.domains[dst].links:
-                    bw_src = self.domains[src].links[(src_port, src_port)]
-                    bw_dst = self.domains[dst].links[(dst_port, dst_port)]
-                    min_bw = min(bw_src, bw_dst)
-                    self.links[link] = (src_port, dst_port, min_bw)
+                if (src_port, src_port) in self.domains[src].links:
+                    if (dst_port, dst_port) in self.domains[dst].links:
+                        bw_src = self.domains[src].links[(src_port, src_port)]
+                        bw_dst = self.domains[dst].links[(dst_port, dst_port)]
+                        min_bw = min(bw_src, bw_dst)
+                        self.links[link] = (src_port, dst_port, min_bw)

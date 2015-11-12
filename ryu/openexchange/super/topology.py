@@ -79,7 +79,7 @@ class Topology(app_manager.RyuApp):
     def topo_reply_handler(self, ev):
         msg = ev.msg
         domain = msg.domain
-        self.topo.domains[domain.id].update_link(domain, msg.links)
+        self.topo.domains[domain.id].update_link(msg.links)
         self.topo.refresh_inter_links_capabilities()
 
         if check_model_is_bw():

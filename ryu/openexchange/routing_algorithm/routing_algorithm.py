@@ -203,8 +203,6 @@ def band_width_compare(graph, paths, best_paths, topo=None):
                     if min_bw > max_bw_of_paths:
                         max_bw_of_paths = min_bw
                         best_path = path
-                        print "min_bw: ", min_bw
-                        print "best_path: ", path
 
                 best_paths[src][dst] = best_path
                 capabilities.setdefault(src, {dst: max_bw_of_paths})
@@ -224,12 +222,13 @@ def band_width_compare(graph, paths, best_paths, topo=None):
                     min_bw = get_min_bw_of_links(graph, path, min_bw)
                     if topo is not None and CONF.oxp_flags == OXP_ADVANCED_BW:
                         min_bw = get_min_bw_of_inter_links(path, topo, min_bw)
-                    if min_bw > max_bw_of_paths:
+                    if (src, dst) == (1, 4):
+                        print "path: ", path, min_bw
+                    if min_bw >= max_bw_of_paths:
                         max_bw_of_paths = min_bw
                         best_path = path
-                        if (src, dst) == (1, 2) or (src, dst) == (2, 1):
-                            print "min_bw: ", min_bw
-                            print "best_path: ", path
+                        if (src, dst) == (1, 4):
+                            print "best_path:", path, min_bw
 
                 best_paths[src][dst] = best_path
                 capabilities.setdefault(src, {dst: max_bw_of_paths})
