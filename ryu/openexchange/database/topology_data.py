@@ -43,7 +43,7 @@ class Domain(data_base.DataBase):
     def __call__(self):
         self.get_links(self.links)
 
-    def get_links(self, links):
+    def get_links(self):
         return self.links
 
     def update_port(self, msg):
@@ -63,8 +63,6 @@ class Domain(data_base.DataBase):
 
             self.ports.add((i.src_vport, oxproto_v1_0.OXPPS_LIVE))
             self.ports.add((i.dst_vport, oxproto_v1_0.OXPPS_LIVE))
-        print "domain:", self.domain_id, self.links
-        return self.links
 
 
 class Super_Topo(data_base.DataBase):
@@ -112,12 +110,6 @@ class Super_Topo(data_base.DataBase):
 
     def refresh_inter_links_capabilities(self):
         if check_model_is_bw():
-            # reflesh the inter-links' bandwidth.
-            # bug!!! error bw data.
-
-            for domain in self.domains.values():
-                print "doid: ", domain.domain_id, domain.links
-
             for link in self.links:
                 src, dst = link
                 src_port, dst_port, cap = self.links[link]

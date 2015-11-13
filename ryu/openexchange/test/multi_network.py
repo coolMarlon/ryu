@@ -73,7 +73,7 @@ def multiControllerNet(con_num=7, sw_num=35, host_num=70):
 
     # domain3 -> others
     net.addLink(switch_list[10], switch_list[16], bw=inter_bw)
-    #net.addLink(switch_list[12], switch_list[16], bw=inter_bw)
+    net.addLink(switch_list[7], switch_list[10], bw=inter_bw)
     #net.addLink(switch_list[12], switch_list[27], bw=inter_bw)
 
     # domain4 -> others

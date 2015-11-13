@@ -60,7 +60,7 @@ class Abstract(app_manager.RyuApp):
         self.domain = app_manager.lookup_service_brick('oxp_event').domain
         self.oxparser = oxproto_v1_0_parser
         self.oxproto = oxproto_v1_0
-        self.topology = topology_data.Domain()
+        self.topology = topology_data.Domain(paths={}, capabilities={})
 
         self.capabilities = {}
         self.paths = {}

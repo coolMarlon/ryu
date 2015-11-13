@@ -41,8 +41,8 @@ class Topology(app_manager.RyuApp):
     def __init__(self, *args, **kwargs):
         super(Topology, self).__init__(*args, **kwargs)
         self.name = 'oxp_topology'
-        self.topo = topology_data.Super_Topo()
-        self.location = host_data.Location()
+        self.topo = topology_data.Super_Topo(domains={}, links={})
+        self.location = host_data.Location(locations={})
         self.domains = {}
         self.oxp_brick = None
 
@@ -54,7 +54,8 @@ class Topology(app_manager.RyuApp):
             if domain.id not in self.topo.domains.keys():
                 self.topo.domains.setdefault(domain.id, None)
 
-                domain_topo = topology_data.Domain(domain_id=domain.id)
+                domain_topo = topology_data.Domain(domain_id=domain.id,
+                                                   links={}, ports=set())
                 self.topo.domains[domain.id] = domain_topo
                 self.location.locations.setdefault(domain.id, set())
 
@@ -79,6 +80,7 @@ class Topology(app_manager.RyuApp):
     def topo_reply_handler(self, ev):
         msg = ev.msg
         domain = msg.domain
+
         self.topo.domains[domain.id].update_link(msg.links)
         self.topo.refresh_inter_links_capabilities()
 
