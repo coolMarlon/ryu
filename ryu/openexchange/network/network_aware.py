@@ -266,11 +266,11 @@ class Network_Aware(app_manager.RyuApp):
                       dp.ofproto.OFP_VERSION)
 
     def raise_sbp_packet_in_event(self, msg, vport_no, data):
-        msg.match.set_in_port(vport_no)
+        match = ofproto_v1_3_parser.OFPMatch(in_port=vport_no)
         pkt_in = ofproto_v1_3_parser.OFPPacketIn(
             self.fake_datapath, buffer_id=msg.buffer_id,
             total_len=msg.total_len, reason=msg.reason, table_id=msg.table_id,
-            cookie=msg.cookie, match=msg.match, data=data)
+            cookie=msg.cookie, match=match, data=data)
 
         ev = oxp_event.sbp_to_oxp_msg_to_ev(pkt_in)
         self.oxp_brick.send_event_to_observers(ev, MAIN_DISPATCHER)

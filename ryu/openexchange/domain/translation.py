@@ -74,7 +74,7 @@ class Translation(app_manager.RyuApp):
         msg = ev.msg
         domain = ev.domain
 
-        pkt = packet.Packet(msg.data)
+        pkt = packet.Packet(buffer(msg.data))
         arp_pkt = pkt.get_protocol(arp.arp)
         ip_pkt = pkt.get_protocol(ipv4.ipv4)
         eth_type = pkt.get_protocols(ethernet.ethernet)[0].ethertype
@@ -125,7 +125,7 @@ class Translation(app_manager.RyuApp):
         if self.abstract.paths:
             if dst_sw:
                 path = self.abstract.get_path(src_sw, dst_sw)
-                self.logger.debug(
+                self.logger.info(
                     " PATH[%s --> %s]:%s" % (ip_src, ip_dst, path))
 
                 flow_info = (eth_type, ip_src, ip_dst, in_port)

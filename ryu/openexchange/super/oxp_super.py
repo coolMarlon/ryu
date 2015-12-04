@@ -134,7 +134,6 @@ class Domain_Network(oxproto_protocol.ProtocolDesc):
             buf += ret
 
             while len(buf) >= required_len:
-                # Parser.
                 (version, msg_type, msg_len, xid) = oxproto_parser.header(buf)
                 required_len = msg_len
                 if len(buf) < required_len:
@@ -145,7 +144,7 @@ class Domain_Network(oxproto_protocol.ProtocolDesc):
                                          version, msg_type, msg_len, xid, buf)
 
                 if msg:
-                    # LOG.info('queue msg %s cls %s', msg, msg.__class__)
+                    LOG.debug('queue msg %s cls %s', msg, msg.__class__)
                     ev = oxp_event.oxp_msg_to_ev(msg)
                     self.oxp_brick.send_event_to_observers(ev, self.state)
 

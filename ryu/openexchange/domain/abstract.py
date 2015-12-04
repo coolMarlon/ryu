@@ -12,7 +12,15 @@ from ryu.ofproto import ofproto_v1_3
 from ryu.controller.handler import set_ev_cls
 from ryu.lib.ip import ipv4_to_bin
 from ryu.lib.mac import haddr_to_bin
+
+from ryu.lib.packet import packet
+from ryu.lib.packet import ethernet
+from ryu.lib.packet import ipv4
+from ryu.lib.packet import arp
+from ryu.lib.packet import lldp
+
 from ryu.controller.handler import MAIN_DISPATCHER, DEAD_DISPATCHER
+from ryu.topology import switches
 
 from ryu.openexchange.event import oxp_event
 from ryu.openexchange.network import network_aware
@@ -27,9 +35,11 @@ from ryu.openexchange.database import topology_data
 from ryu.openexchange.domain import setting
 
 from ryu.openexchange.routing_algorithm import routing_algorithm
+from ryu.openexchange.utils import utils
 from ryu.openexchange.utils.controller_id import cap_to_str
 from ryu.openexchange.utils.utils import check_model_is_advanced
 from ryu.openexchange.utils.utils import check_model_is_bw
+from ryu.openexchange.utils.utils import check_model_is_compressed
 from ryu import cfg
 
 CONF = cfg.CONF
@@ -252,13 +262,58 @@ class Abstract(app_manager.RyuApp):
 
             self.topo_reply(domain)
 
+    def packet_in_of_compressed(self, in_port, msg):
+        data = sbp_data = ''
+        src = dst = None
+
+        pkt = packet.Packet(buffer(msg.data))
+        arp_pkt = pkt.get_protocol(arp.arp)
+        ip_pkt = pkt.get_protocol(ipv4.ipv4)
+        lldp_pkt = pkt.get_protocol(lldp.lldp)
+
+        eth_type = 0x800
+        if len(pkt.get_protocols(ethernet.ethernet)):
+            eth_type = pkt.get_protocols(ethernet.ethernet)[0].ethertype
+        sbp_header = self.oxparser.OXPSBP_Header(type=1)
+
+        if isinstance(arp_pkt, arp.arp):
+            sbp_header.flags = self.oxproto.OXPSBP_FLAGS_CARRY
+            data = msg.data
+            src = arp_pkt.src_ip
+            dst = arp_pkt.dst_ip
+        elif isinstance(lldp_pkt, lldp.lldp):
+            sbp_header.flags = self.oxproto.OXPSBP_FLAGS_CARRY
+            data = msg.data
+            src = '0.0.0.0'
+            dst = '0.0.0.0'
+        else:
+            src = ip_pkt.src
+            dst = ip_pkt.dst
+
+        sbp_pkt_in = self.oxparser.OXPSBP_Forwarding_Request(
+            src_ip=src, dst_ip=dst, in_port=in_port,
+            eth_type=eth_type, data=data)
+
+        sbp_header.length = len(data) + oxproto_v1_0.OXPSBP_REQUEST_SIZE
+        sbp_data = utils._build_compressed_sbp(sbp_header, sbp_pkt_in)
+
+        return sbp_data
+
     @set_ev_cls(oxp_event.EventOXPSBPPacketIn, MAIN_DISPATCHER)
     def sbp_packet_in_handler(self, ev):
         msg = ev.msg
-        msg.serialize()
+        in_port = msg.match['in_port']
+        sbp_data = None
+
+        if check_model_is_compressed():
+            sbp_data = self.packet_in_of_compressed(in_port, msg)
+        else:
+            msg.serialize()
+            sbp_data = msg.buf
+
         if self.domain is None:
             self.domain = app_manager.lookup_service_brick('oxp_event').domain
 
-        sbp_pkt = self.oxparser.OXPSBP(self.domain, data=msg.buf)
+        sbp_pkt = self.oxparser.OXPSBP(self.domain, data=sbp_data)
         self.domain.send_msg(sbp_pkt)
         return

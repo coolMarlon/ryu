@@ -30,6 +30,9 @@ from ryu.openexchange import oxproto_v1_0_parser
 
 from ryu.openexchange.domain.oxp_domain import Domain_Controller
 from ryu.openexchange.domain import config
+
+from ryu.openexchange.utils.utils import check_model_is_compressed
+from ryu.openexchange.utils import utils
 from ryu import cfg
 
 CONF = cfg.CONF
@@ -220,15 +223,7 @@ class OXP_Client_Handler(app_manager.RyuApp):
         else:
             pass
 
-    @set_ev_handler(oxp_event.EventOXPSBP, MAIN_DISPATCHER)
-    def SBP_handler(self, ev):
-        # parser the msg and handle the SBP message.
-        # raise the event.
-        # finish it in service or app.
-        msg = ev.msg
-        domain = msg.domain
-        data = msg.data
-
+    def sbp_parser_of_normal(self, domain, datapath, data):
         if CONF.sbp_proto_type == oxproto_v1_0.OXPS_OPENFLOW:
             buf = bytearray()
             required_len = ofproto_common.OFP_HEADER_SIZE
@@ -237,14 +232,16 @@ class OXP_Client_Handler(app_manager.RyuApp):
                 return
             buf += data
             while len(buf) >= required_len:
-                (version, msg_type, msg_len, xid) = ofproto_parser.header(buf)
+                (version, msg_type,
+                 msg_len, xid) = ofproto_parser.header(buf)
 
                 required_len = msg_len
                 if len(buf) < required_len:
                     break
 
-                msg = ofproto_parser.msg(self.network_aware.fake_datapath,
-                                         version, msg_type, msg_len, xid, buf)
+                msg = ofproto_parser.msg(datapath,
+                                         version, msg_type,
+                                         msg_len, xid, buf)
                 if msg:
                     ev = oxp_event.sbp_to_oxp_msg_to_ev(msg)
                     ev.domain = domain
@@ -252,3 +249,53 @@ class OXP_Client_Handler(app_manager.RyuApp):
 
                 buf = buf[required_len:]
                 required_len = ofproto_common.OFP_HEADER_SIZE
+
+    def sbp_parser_of_compressed(self, domain, datapath, parser, data):
+        ofp_parser = datapath.ofproto_parser
+        buf = data
+        sbp_header = parser.OXPSBP_Header.parser(buf, 0)
+        msg = None
+        default_buffer_id = datapath.ofproto.OFP_NO_BUFFER
+
+        if sbp_header.type == oxproto_v1_0.OXPSBP_PACKET_OUT:
+            #generate a packet_out event
+            sbp_packet_out = parser.OXPSBP_Packet_Out.parser(
+                buf, oxproto_v1_0.OXP_SBP_COMPRESSED_HEADER_SIZE)
+            if CONF.sbp_proto_type == oxproto_v1_0.OXPS_OPENFLOW:
+                msg = utils._build_packet_out(datapath, default_buffer_id,
+                                              oxproto_v1_0.OXPP_CONTROLLER,
+                                              sbp_packet_out.out_port,
+                                              sbp_packet_out.data)
+        elif sbp_header.type == oxproto_v1_0.OXPSBP_FORWARDING_REPLY:
+            #generate a flow_mod event
+            reply = parser.OXPSBP_Forwarding_Reply.parser(
+                buf, oxproto_v1_0.OXP_SBP_COMPRESSED_HEADER_SIZE)
+
+            if CONF.sbp_proto_type == oxproto_v1_0.OXPS_OPENFLOW:
+                match = ofp_parser.OFPMatch(
+                    in_port=reply.src_vport, eth_type=reply.eth_type,
+                    ipv4_src=reply.src_ip, ipv4_dst=reply.dst_ip)
+
+                actions = [ofp_parser.OFPActionOutput(reply.dst_vport)]
+
+                msg = utils._build_flow(datapath, 1, match, actions,
+                                        idle_timeout=0, hard_timeout=10)
+        else:
+            return None
+        if msg:
+            ev = oxp_event.sbp_to_oxp_msg_to_ev(msg)
+            ev.domain = domain
+            self.send_event_to_observers(ev, MAIN_DISPATCHER)
+
+    @set_ev_handler(oxp_event.EventOXPSBP, MAIN_DISPATCHER)
+    def SBP_handler(self, ev):
+        msg = ev.msg
+        domain = msg.domain
+        parser = domain.oxproto_parser
+        data = msg.data
+        datapath = self.network_aware.fake_datapath
+
+        if check_model_is_compressed():
+            self.sbp_parser_of_compressed(domain, datapath, parser, data)
+        else:
+            self.sbp_parser_of_normal(domain, datapath, data)

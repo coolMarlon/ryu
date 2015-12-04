@@ -24,6 +24,7 @@ from ryu.openexchange import oxproto_v1_0
 from ryu.openexchange.domain import config
 from ryu.openexchange.oxproto_common import OXP_MAX_CAPACITY
 from ryu.openexchange.utils.utils import check_model_is_bw, check_model_is_hop
+from ryu.openexchange.utils import utils
 from ryu.ofproto import ofproto_common, ofproto_parser
 from ryu.topology import switches
 from ryu import cfg
@@ -104,17 +105,19 @@ class Topology(app_manager.RyuApp):
     @set_ev_cls(oxp_event.EventOXPSBPPacketIn, MAIN_DISPATCHER)
     def sbp_packet_in_handler(self, ev):
         msg = ev.msg
-        in_port = msg.match['in_port']
         domain = ev.domain
         data = msg.data
+        if utils.check_model_is_compressed(domain=domain) and len(data) <= 0:
+            return
 
         try:
             src_domain_id, src_vport_no = switches.LLDPPacket.lldp_parse(data)
-            if check_model_is_hop():
+            in_port = msg.match['in_port']
+            if check_model_is_hop(domain=domain):
                 link = {(domain.id, src_domain_id): (in_port, src_vport_no, 1),
                         (src_domain_id, domain.id): (src_vport_no, in_port, 1)}
                 self.topo.update_link(link)
-            elif check_model_is_bw():
+            elif check_model_is_bw(domain=domain):
                 domain_topo = self.topo.domains[domain.id]
                 src_domain_topo = self.topo.domains[src_domain_id]
 
@@ -128,6 +131,7 @@ class Topology(app_manager.RyuApp):
 
                 L = {(domain.id, src_domain_id): (in_port, src_vport_no, bw),
                      (src_domain_id, domain.id): (src_vport_no, in_port, bw)}
+
                 self.topo.update_link(L)
             else:
                 pass

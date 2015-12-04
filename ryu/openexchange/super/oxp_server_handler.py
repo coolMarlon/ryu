@@ -27,6 +27,7 @@ from ryu.ofproto import ofproto_v1_0, ofproto_v1_3
 from ryu.ofproto import ofproto_v1_0_parser, ofproto_v1_3_parser
 
 from ryu.openexchange.domain import config
+from ryu.openexchange.utils.utils import check_model_is_compressed
 from ryu import cfg
 
 
@@ -156,12 +157,6 @@ class OXP_Server_Handler(ryu.base.app_manager.RyuApp):
         oxproto_parser = domain.oxproto_parser
         self.logger.debug('domain features ev %s', msg)
 
-        set_config = oxproto_parser.OXPSetConfig(
-            domain, CONF.oxp_flags, CONF.oxp_period,
-            CONF.oxp_miss_send_len)
-
-        domain.send_msg(set_config)
-
         get_config_request = oxproto_parser.OXPGetConfigRequest(domain)
         domain.send_msg(get_config_request)
 
@@ -207,14 +202,7 @@ class OXP_Server_Handler(ryu.base.app_manager.RyuApp):
 
         domain.miss_send_len = msg.miss_send_len
 
-    @set_ev_handler(oxp_event.EventOXPSBP, MAIN_DISPATCHER)
-    def SBP_handler(self, ev):
-        # Parser the msg and raise an event.
-        # Handle event in service or app.
-        msg = ev.msg
-        domain = msg.domain
-        data = msg.data
-
+    def sbp_parser_of_normal(self, domain, datapath, data):
         if domain.sbp_proto_type == oxproto_v1_0.OXPS_OPENFLOW:
             buf = bytearray()
             required_len = ofproto_common.OFP_HEADER_SIZE
@@ -224,13 +212,13 @@ class OXP_Server_Handler(ryu.base.app_manager.RyuApp):
             buf += data
             while len(buf) >= required_len:
                 (version, msg_type, msg_len, xid) = ofproto_parser.header(buf)
-                self.logger.debug('ofp msg %s cls %s', msg, msg.__class__)
                 required_len = msg_len
                 if len(buf) < required_len:
                     break
 
-                msg = ofproto_parser.msg(self.fake_datapath,
-                                         version, msg_type, msg_len, xid, buf)
+                msg = ofproto_parser.msg(datapath, version, msg_type,
+                                         msg_len, xid, buf)
+                self.logger.debug('ofp msg %s cls %s', msg, msg.__class__)
                 if msg:
                     ev = oxp_event.sbp_to_oxp_msg_to_ev(msg)
                     ev.domain = domain
@@ -238,3 +226,49 @@ class OXP_Server_Handler(ryu.base.app_manager.RyuApp):
 
                 buf = buf[required_len:]
                 required_len = ofproto_common.OFP_HEADER_SIZE
+
+    def sbp_parser_of_compressed(self, domain, datapath, parser, data):
+        ofp_parser = datapath.ofproto_parser
+        buf = bytearray()
+        buf += data
+        sbp_header = parser.OXPSBP_Header.parser(buffer(buf), 0)
+        msg = None
+        default_buffer_id = datapath.ofproto.OFP_NO_BUFFER
+
+        if sbp_header.type == oxproto_v1_0.OXPSBP_FORWARDING_REQUEST:
+            # generate a packet_in
+            request = parser.OXPSBP_Forwarding_Request.parser(
+                buf, oxproto_v1_0.OXP_SBP_COMPRESSED_HEADER_SIZE)
+            pkt_data = ''
+
+            if sbp_header.flags == oxproto_v1_0.OXPSBP_FLAGS_CARRY:
+                pkt_data = request.data
+            if CONF.sbp_proto_type == oxproto_v1_0.OXPS_OPENFLOW:
+                match = ofp_parser.OFPMatch(
+                    in_port=request.in_port, eth_type=request.eth_type,
+                    ipv4_src=request.src_ip, ipv4_dst=request.dst_ip)
+                msg = ofp_parser.OFPPacketIn(
+                    datapath, buffer_id=default_buffer_id,
+                    match=match, data=buffer(pkt_data))
+            self.logger.debug('compressed msg %s cls %s', msg, msg.__class__)
+        else:
+            return None
+        if msg:
+            ev = oxp_event.sbp_to_oxp_msg_to_ev(msg)
+            ev.domain = domain
+            self.send_event_to_observers(ev, MAIN_DISPATCHER)
+
+    @set_ev_handler(oxp_event.EventOXPSBP, MAIN_DISPATCHER)
+    def SBP_handler(self, ev):
+        # Parser the msg and raise an event.
+        # Handle event in service or app.
+        msg = ev.msg
+        domain = msg.domain
+        datapath = self.fake_datapath
+        data = msg.data
+        parser = domain.oxproto_parser
+
+        if check_model_is_compressed(domain=domain):
+            self.sbp_parser_of_compressed(domain, datapath, parser, data)
+        else:
+            self.sbp_parser_of_normal(domain, datapath, data)

@@ -38,6 +38,7 @@ super_function = {oxproto_common.OXP_ADVANCED_HOP: 'full_floyd_dict',
 
 
 def function(flags):
+    flags = flags & oxproto_common.OXP_FORWARDING_FLGAS
     if CONF.oxp_role == 'domain':
         return domain_function[flags]
     if CONF.oxp_role == 'super':

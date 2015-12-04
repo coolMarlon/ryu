@@ -56,6 +56,8 @@ import binascii
 from oxproto_parser import StringifyMixin, MsgBase, msg_pack_into, msg_str_attr
 from ryu.lib import addrconv
 from ryu.lib import mac
+from ryu.lib.ip import ipv4_to_str
+from ryu.lib.ip import ipv4_to_bin
 from . import oxproto_parser
 from . import oxproto_v1_0 as oxproto
 from ryu import utils
@@ -481,16 +483,124 @@ class OXPSBP(MsgBase):
     def parser(cls, domain, version, msg_type, msg_len, xid, buf):
         msg = super(OXPSBP, cls).parser(
             domain, version, msg_type, msg_len, xid, buf)
-        # we don't parser the data of SBP due to no deal of model.
-        # just leave it to handler.
         msg.data = buf[oxproto.OXP_HEADER_SIZE:]
 
         return msg
 
     def _serialize_body(self):
-        # we suppose that handler has finished the serilization work of data.
         assert self.data is not None
         self.buf += self.data
+
+
+class OXPSBP_Header(StringifyMixin):
+    def __init__(self, type=None, flags=0, length=None, xid=0):
+        super(OXPSBP_Header, self).__init__()
+        self.type = type
+        self.flags = flags
+        self.length = length
+        self.xid = xid
+        self.buf = bytearray()
+
+    @classmethod
+    def parser(cls, buf, offset):
+        _type, flags, length, xid = struct.unpack_from(
+            oxproto.OXP_SBP_COMPRESSED_HEADER_PACK_STR,
+            buffer(buf), offset)
+        msg = OXPSBP_Header(type=_type, flags=flags, length=length, xid=xid)
+        return msg
+
+    def serialize(self):
+        msg_pack_into(oxproto.OXP_SBP_COMPRESSED_HEADER_PACK_STR, self.buf,
+                      0, self.type, self.flags, self.length, self.xid)
+
+
+class OXPSBP_Forwarding_Request(StringifyMixin):
+    def __init__(self, src_ip, dst_ip, in_port, mask=255,
+                 eth_type=0x0800, qos=1, data=None):
+        super(OXPSBP_Forwarding_Request, self).__init__()
+        self.src_ip = src_ip
+        self.dst_ip = dst_ip
+        self.in_port = in_port
+        self.mask = mask
+        self.eth_type = eth_type
+        self.qos = qos
+        self.buf = bytearray()
+        self.data = data
+
+    @classmethod
+    def parser(cls, buf, offset):
+        src_ip, dst_ip, in_port, mask, eth_type, qos = struct.unpack_from(
+            oxproto.OXPSBP_FORWARDING_REQUEST_PACK_STR, buffer(buf), offset)
+
+        data = buf[oxproto.OXPSBP_REQUEST_SIZE:]
+        msg = OXPSBP_Forwarding_Request(src_ip=ipv4_to_str(src_ip),
+                                        dst_ip=ipv4_to_str(dst_ip),
+                                        in_port=in_port, mask=mask,
+                                        eth_type=eth_type, qos=qos,
+                                        data=data)
+        return msg
+
+    def serialize(self):
+        msg_pack_into(oxproto.OXPSBP_FORWARDING_REQUEST_PACK_STR, self.buf,
+                      0, ipv4_to_bin(self.src_ip), ipv4_to_bin(self.dst_ip),
+                      self.in_port, self.mask,
+                      self.eth_type, self.qos)
+        self.buf += self.data
+
+
+class OXPSBP_Forwarding_Reply(StringifyMixin):
+    def __init__(self, src_ip, dst_ip, src_vport,
+                 dst_vport, mask=255, eth_type=0x800, qos=1):
+        super(OXPSBP_Forwarding_Reply, self).__init__()
+        self.src_ip = src_ip
+        self.dst_ip = dst_ip
+        self.src_vport = src_vport
+        self.dst_vport = dst_vport
+        self.mask = mask
+        self.eth_type = eth_type
+        self.qos = qos
+        self.buf = bytearray()
+
+    @classmethod
+    def parser(cls, buf, offset):
+        (src_ip, dst_ip, src_vport,
+         dst_vport, mask, eth_type,
+         qos) = struct.unpack_from(oxproto.OXPSBP_FORWARDING_REPLY_PACK_STR,
+                                   buffer(buf), offset)
+
+        msg = OXPSBP_Forwarding_Reply(src_ip=ipv4_to_str(src_ip),
+                                      dst_ip=ipv4_to_str(dst_ip),
+                                      src_vport=src_vport, dst_vport=dst_vport,
+                                      mask=mask, eth_type=eth_type, qos=qos)
+        return msg
+
+    def serialize(self):
+        msg_pack_into(oxproto.OXPSBP_FORWARDING_REPLY_PACK_STR, self.buf, 0,
+                      ipv4_to_bin(self.src_ip), ipv4_to_bin(self.dst_ip),
+                      self.src_vport, self.dst_vport,
+                      self.mask, self.eth_type, self.qos)
+
+
+class OXPSBP_Packet_Out(StringifyMixin):
+    def __init__(self, out_port, data=None):
+        super(OXPSBP_Packet_Out, self).__init__()
+        self.out_port = out_port
+        self.data = data
+        self.buf = bytearray()
+
+    @classmethod
+    def parser(cls, buf, offset):
+        (out_port, ) = struct.unpack_from(
+            oxproto.OXPSBP_PACKET_OUT_PACK_STR, buffer(buf), offset)
+
+        data = buf[oxproto.OXPSBP_PKT_OUT_SIZE:]
+        msg = OXPSBP_Packet_Out(out_port=out_port, data=data)
+        return msg
+
+    def serialize(self):
+        msg_pack_into(oxproto.OXPSBP_PACKET_OUT_PACK_STR,
+                      self.buf, 0, self.out_port)
+        self.buf += bytearray(self.data)
 
 
 @_register_parser

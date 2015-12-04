@@ -4,6 +4,7 @@ Define some utils functions.
 import logging
 from ryu.ofproto.ofproto_v1_3 import OFPP_TABLE
 from ryu.openexchange.oxproto_common import OXP_ADVANCED_MODEL
+from ryu.openexchange.oxproto_common import OXP_MODEL_COMPRESSED
 from ryu.openexchange.oxproto_common import OXP_BW_MODEL, OXP_HOP_MODEL
 from ryu import cfg
 
@@ -12,20 +13,35 @@ LOG = logging.getLogger('ryu.openexchange.utils')
 CONF = cfg.CONF
 
 
-def check_model_is_advanced():
-    if OXP_ADVANCED_MODEL == CONF.oxp_flags & OXP_ADVANCED_MODEL:
+def _get_flags(domain=None):
+    flags = None
+    if domain is not None:
+        flags = domain.flags
+    else:
+        flags = CONF.oxp_flags
+    return flags
+
+
+def check_model_is_advanced(domain=None):
+    if OXP_ADVANCED_MODEL == _get_flags(domain) & OXP_ADVANCED_MODEL:
         return True
     return False
 
 
-def check_model_is_bw():
-    if OXP_BW_MODEL == CONF.oxp_flags & OXP_BW_MODEL:
+def check_model_is_bw(domain=None):
+    if OXP_BW_MODEL == _get_flags(domain) & OXP_BW_MODEL:
         return True
     return False
 
 
-def check_model_is_hop():
-    if OXP_HOP_MODEL == CONF.oxp_flags & OXP_HOP_MODEL:
+def check_model_is_hop(domain=None):
+    if OXP_HOP_MODEL == _get_flags(domain) & OXP_HOP_MODEL:
+        return True
+    return False
+
+
+def check_model_is_compressed(domain=None):
+    if OXP_MODEL_COMPRESSED == _get_flags(domain) & OXP_MODEL_COMPRESSED:
         return True
     return False
 
@@ -53,6 +69,20 @@ def _build_flow(dp, p, match, actions, idle_timeout=0, hard_timeout=0):
 def add_flow(dp, p, match, actions, idle_timeout=0, hard_timeout=0):
     mod = _build_flow(dp, p, match, actions, idle_timeout, hard_timeout)
     dp.send_msg(mod)
+
+
+def _build_compressed_sbp(header, packet):
+    header.serialize()
+    packet.serialize()
+    sbp_data = header.buf + packet.buf
+    return sbp_data
+
+
+def _build_compressed_packet_out(domain, out_port, data):
+    parser = domain.oxproto_parser
+    out = domain.oxproto_parser.OXPSBP_Packet_Out(
+        out_port, data=data)
+    return out
 
 
 def _build_packet_out(datapath, buffer_id, src_port, dst_port, data):
@@ -184,28 +214,55 @@ def install_flow(datapaths, link2port, access_table, path,
 
 def oxp_send_packet_out(domain, msg, src_port, dst_port):
     datapath = msg.datapath
-    out = _build_packet_out(
-        datapath, datapath.ofproto.OFP_NO_BUFFER, src_port, dst_port, msg.data)
-    out.serialize()
+    sbp_data = None
+    if len(msg.data) == 0:
+        return
+    if check_model_is_compressed(domain):
+        out = _build_compressed_packet_out(domain, dst_port, msg.data)
+        sbp_header = domain.oxproto_parser.OXPSBP_Header(
+            type=domain.oxproto.OXPSBP_PACKET_OUT,
+            flags=domain.oxproto.OXPSBP_FLAGS_CARRY)
 
-    sbp_pkt_out = domain.oxproto_parser.OXPSBP(domain, data=out.buf)
+        size = domain.oxproto.OXPSBP_PKT_OUT_SIZE
+        sbp_header.length = len(msg.data) + size
+        sbp_data = _build_compressed_sbp(sbp_header, out)
+    else:
+        out = _build_packet_out(datapath, datapath.ofproto.OFP_NO_BUFFER,
+                                src_port, dst_port, msg.data)
+        out.serialize()
+        sbp_data = out.buf
+
+    sbp_pkt_out = domain.oxproto_parser.OXPSBP(domain, data=sbp_data)
     domain.send_msg(sbp_pkt_out)
 
 
 def oxp_send_flow_mod(domain, datapath, flow_info, src_port, dst_port):
-    parser = datapath.ofproto_parser
-    actions = []
-    actions.append(parser.OFPActionOutput(dst_port))
+    sbp_data = None
+    if check_model_is_compressed(domain):
 
-    match = parser.OFPMatch(
-        in_port=src_port, eth_type=flow_info[0],
-        ipv4_src=flow_info[1], ipv4_dst=flow_info[2])
+        forwarding_reply = domain.oxproto_parser.OXPSBP_Forwarding_Reply(
+            flow_info[1], flow_info[2],
+            src_vport=src_port, dst_vport=dst_port,
+            mask=255, eth_type=flow_info[0])
+        sbp_header = domain.oxproto_parser.OXPSBP_Header(
+            type=domain.oxproto.OXPSBP_FORWARDING_REPLY)
+        sbp_header.length = domain.oxproto.OXPSBP_REPLY_SIZE
+        sbp_data = _build_compressed_sbp(sbp_header, forwarding_reply)
+    else:
+        parser = datapath.ofproto_parser
+        actions = []
+        actions.append(parser.OFPActionOutput(dst_port))
 
-    flow = _build_flow(datapath, 1, match, actions,
-                       idle_timeout=10, hard_timeout=30)
-    flow.serialize()
+        match = parser.OFPMatch(
+            in_port=src_port, eth_type=flow_info[0],
+            ipv4_src=flow_info[1], ipv4_dst=flow_info[2])
 
-    sbp_flow_mod = domain.oxproto_parser.OXPSBP(domain, data=flow.buf)
+        flow = _build_flow(datapath, 1, match, actions,
+                           idle_timeout=10, hard_timeout=30)
+        flow.serialize()
+        sbp_data = flow.buf
+
+    sbp_flow_mod = domain.oxproto_parser.OXPSBP(domain, data=sbp_data)
     domain.send_msg(sbp_flow_mod)
 
 

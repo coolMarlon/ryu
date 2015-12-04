@@ -114,39 +114,30 @@ class Routing(app_manager.RyuApp):
 
     def arp_forwarding(self, domain, msg, arp_dst_ip):
         src_domain = domain
-        datapath = msg.datapath
-        ofproto = datapath.ofproto
-        parser = datapath.ofproto_parser
-        domain_id = self.get_host_location(arp_dst_ip)
+        ofproto = msg.datapath.ofproto
 
+        domain_id = self.get_host_location(arp_dst_ip)
         if domain_id:
             # build packet_out pkt and put it into sbp, send to domain
             domain = self.domains[domain_id]
-
-            out = utils._build_packet_out(
-                datapath, ofproto.OFP_NO_BUFFER,
-                ofproto.OFPP_CONTROLLER, ofproto.OFPP_LOCAL, msg.data)
-            out.serialize()
-
-            sbp_pkt = domain.oxproto_parser.OXPSBP(domain, data=out.buf)
-            domain.send_msg(sbp_pkt)
+            utils.oxp_send_packet_out(domain, msg,
+                                      ofproto.OFPP_CONTROLLER,
+                                      ofproto.OFPP_LOCAL)
+            return
         else:
             # access info is not existed. send to all UNknow access port
             for domain in self.domains.values():
                 if domain == src_domain:
                     continue
-                out = utils._build_packet_out(
-                    datapath, ofproto.OFP_NO_BUFFER,
-                    ofproto.OFPP_CONTROLLER, ofproto.OFPP_LOCAL, msg.data)
-                out.serialize()
-
-                sbp_pkt = domain.oxproto_parser.OXPSBP(domain, data=out.buf)
-                domain.send_msg(sbp_pkt)
+                utils.oxp_send_packet_out(domain, msg,
+                                          ofproto.OFPP_CONTROLLER,
+                                          ofproto.OFPP_LOCAL)
 
     def shortest_forwarding(self, domain, msg, eth_type, ip_src, ip_dst):
         src_domain = dst_domain = None
         src_domain = self.get_host_location(ip_src)
         dst_domain = self.get_host_location(ip_dst)
+
         if self.paths:
             if dst_domain:
                 path = self.paths[src_domain][dst_domain]
@@ -161,26 +152,27 @@ class Routing(app_manager.RyuApp):
                 utils.oxp_install_flow(self.domains, self.topology.links,
                                        access_table, path, flow_info, msg)
         else:
-            # Reflesh the topology database.
             self.get_topology(None)
 
     @set_ev_cls(oxp_event.EventOXPSBPPacketIn, MAIN_DISPATCHER)
     def _sbp_packet_in_handler(self, ev):
         msg = ev.msg
-        in_port = msg.match['in_port']
         domain = ev.domain
         data = msg.data
 
         pkt = packet.Packet(msg.data)
         arp_pkt = pkt.get_protocol(arp.arp)
         ip_pkt = pkt.get_protocol(ipv4.ipv4)
-        eth_type = pkt.get_protocols(ethernet.ethernet)[0].ethertype
 
-        # We implemente oxp in a big network,
-        # so we shouldn't care about the subnet and router.
         if isinstance(arp_pkt, arp.arp):
             self.arp_forwarding(domain, msg, arp_pkt.dst_ip)
 
         if isinstance(ip_pkt, ipv4.ipv4):
+            eth_type = pkt.get_protocols(ethernet.ethernet)[0].ethertype
             self.shortest_forwarding(domain, msg, eth_type,
                                      ip_pkt.src, ip_pkt.dst)
+        if utils.check_model_is_compressed(domain=domain) and len(data) <= 0:
+            eth_type = msg.match['eth_type']
+            src = msg.match['ipv4_src']
+            dst = msg.match['ipv4_dst']
+            self.shortest_forwarding(domain, msg, eth_type, src, dst)
