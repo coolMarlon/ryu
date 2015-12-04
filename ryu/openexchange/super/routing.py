@@ -105,8 +105,12 @@ class Routing(app_manager.RyuApp):
     @set_ev_cls(oxp_event.EventOXPLinkDiscovery,
                 [MAIN_DISPATCHER, DEAD_DISPATCHER])
     def get_topology(self, ev):
+        domain = ev.domain
+        self._get_topology(domain)
+
+    def _get_topology(self, domain):
         self.graph = self.get_graph(self.topology.links, self.domains)
-        self.get_path(self.graph, None, ev.domain.flags)
+        self.get_path(self.graph, None, domain.flags)
 
     @set_ev_cls(oxp_event.EventOXPTopoReply, MAIN_DISPATCHER)
     def get_path_dict(self, ev):
@@ -152,7 +156,7 @@ class Routing(app_manager.RyuApp):
                 utils.oxp_install_flow(self.domains, self.topology.links,
                                        access_table, path, flow_info, msg)
         else:
-            self.get_topology(None)
+            self._get_topology(domain)
 
     @set_ev_cls(oxp_event.EventOXPSBPPacketIn, MAIN_DISPATCHER)
     def _sbp_packet_in_handler(self, ev):

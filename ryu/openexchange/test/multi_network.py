@@ -48,6 +48,7 @@ def multiControllerNet(con_num=7, sw_num=35, host_num=70):
 
     logger.debug("*** Creating links of host2switch.")
     for i in xrange(0, sw_num):
+        #net.addLink(switch_list[i], host_list[i])
         net.addLink(switch_list[i], host_list[i*2])
         net.addLink(switch_list[i], host_list[i*2+1])
 
