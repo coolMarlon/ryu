@@ -76,6 +76,7 @@ class Abstract(app_manager.RyuApp):
         self.paths = {}
         self.multi_paths = {}
         self.links = {}
+        self.buffer = {}
 
     @set_ev_cls(oxp_event.EventOXPVportStateChange, MAIN_DISPATCHER)
     def vport_handler(self, ev):
@@ -289,6 +290,9 @@ class Abstract(app_manager.RyuApp):
         else:
             src = ip_pkt.src
             dst = ip_pkt.dst
+            # save packet for packet_out.
+            self.buffer.setdefault((eth_type, src, dst), [])
+            self.buffer[(eth_type, src, dst)].append(msg.data)
 
         sbp_pkt_in = self.oxparser.OXPSBP_Forwarding_Request(
             src_ip=src, dst_ip=dst, in_port=in_port,

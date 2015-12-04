@@ -125,15 +125,24 @@ class Translation(app_manager.RyuApp):
         if self.abstract.paths:
             if dst_sw:
                 path = self.abstract.get_path(src_sw, dst_sw)
-                self.logger.info(
+                self.logger.debug(
                     " PATH[%s --> %s]:%s" % (ip_src, ip_dst, path))
 
                 flow_info = (eth_type, ip_src, ip_dst, in_port)
-                if (eth_type, ip_src, ip_dst) in self.buffer:
-                    data = self.buffer[(eth_type, ip_src, ip_dst)]
-                    del self.buffer[(eth_type, ip_src, ip_dst)]
+                _key = (eth_type, ip_src, ip_dst)
+                if utils.check_model_is_compressed():
+                    if _key in self.abstract.buffer:
+                        data_list = self.abstract.buffer[_key]
+                        if len(data_list) > 0:
+                            data = data_list.pop(0)
+                    else:
+                        flag = True
                 else:
-                    flag = True
+                    if _key in self.buffer:
+                        data = self.buffer[_key]
+                        del self.buffer[_key]
+                    else:
+                        flag = True
                 utils.install_flow(self.datapaths,
                                    self.network.link_to_port,
                                    self.network.access_table, path, flow_info,
