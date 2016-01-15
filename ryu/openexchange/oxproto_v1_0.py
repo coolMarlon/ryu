@@ -33,7 +33,8 @@ OXP_NO_BUFFER = 0xffffffff
 OXPP_MAX = 0xff00       # Max port number
 OXPP_IN_PORT = 0xfff8   # Send the packet out the input port.
 
-OXPP_FLOOD = 0xfffb     # Flood in all outerior ports except in_port.
+OXPP_FLOOD = 0xfffb     # Flood in all outerior ports except in_port and
+                        # those blocked and link down.
 
 OXPP_ALL = 0xfffc       # send the packet to all outerior ports.
 OXPP_CONTROLLER = 0xfffd    # send the packet to the super controller.
