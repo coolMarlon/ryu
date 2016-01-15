@@ -27,7 +27,7 @@ from ryu.ofproto import ofproto_v1_0, ofproto_v1_3
 from ryu.ofproto import ofproto_v1_0_parser, ofproto_v1_3_parser
 
 from ryu.openexchange.domain import config
-from ryu.openexchange.utils.utils import check_model_is_compressed
+from ryu.openexchange.utils.utils import check_mode_is_compressed
 from ryu import cfg
 
 
@@ -268,7 +268,7 @@ class OXP_Server_Handler(ryu.base.app_manager.RyuApp):
         data = msg.data
         parser = domain.oxproto_parser
 
-        if check_model_is_compressed(domain=domain):
+        if check_mode_is_compressed(domain=domain):
             self.sbp_parser_of_compressed(domain, datapath, parser, data)
         else:
             self.sbp_parser_of_normal(domain, datapath, data)

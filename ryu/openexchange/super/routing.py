@@ -19,7 +19,7 @@ from ryu.openexchange.network import network_monitor
 from ryu.openexchange.domain import setting
 from ryu.openexchange.routing_algorithm.routing_algorithm import get_paths
 from ryu.openexchange.utils import utils
-from ryu.openexchange.utils.utils import check_model_is_hop, check_model_is_bw
+from ryu.openexchange.utils.utils import check_mode_is_hop, check_mode_is_bw
 from ryu.openexchange.event import oxp_event
 
 
@@ -58,7 +58,7 @@ class Routing(app_manager.RyuApp):
 
     def get_graph(self, link_list, nodes):
         graph = nx.DiGraph()
-        if check_model_is_hop():
+        if check_mode_is_hop():
             for src in nodes.keys():
                 for dst in nodes.keys():
                     graph.add_edge(src, dst, weight=float('inf'))
@@ -66,7 +66,7 @@ class Routing(app_manager.RyuApp):
                         graph[src][src]['weight'] = 0
                     elif (src, dst) in link_list:
                         graph[src][dst]['weight'] = link_list[(src, dst)][2]
-        if check_model_is_bw():
+        if check_mode_is_bw():
             for src in nodes.keys():
                 for dst in nodes.keys():
                     graph.add_edge(src, dst, weight=float('inf'))
@@ -175,7 +175,7 @@ class Routing(app_manager.RyuApp):
             eth_type = pkt.get_protocols(ethernet.ethernet)[0].ethertype
             self.shortest_forwarding(domain, msg, eth_type,
                                      ip_pkt.src, ip_pkt.dst)
-        if utils.check_model_is_compressed(domain=domain) and len(data) <= 0:
+        if utils.check_mode_is_compressed(domain=domain) and len(data) <= 0:
             eth_type = msg.match['eth_type']
             src = msg.match['ipv4_src']
             dst = msg.match['ipv4_dst']

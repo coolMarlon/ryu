@@ -23,7 +23,7 @@ from ryu.openexchange.database import host_data
 from ryu.openexchange import oxproto_v1_0
 from ryu.openexchange.domain import config
 from ryu.openexchange.oxproto_common import OXP_MAX_CAPACITY
-from ryu.openexchange.utils.utils import check_model_is_bw, check_model_is_hop
+from ryu.openexchange.utils.utils import check_mode_is_bw, check_mode_is_hop
 from ryu.openexchange.utils import utils
 from ryu.ofproto import ofproto_common, ofproto_parser
 from ryu.topology import switches
@@ -85,7 +85,7 @@ class Topology(app_manager.RyuApp):
         self.topo.domains[domain.id].update_link(msg.links)
         self.topo.refresh_inter_links_capabilities()
 
-        if check_model_is_bw():
+        if check_mode_is_bw():
             event = oxp_event.EventOXPTrafficStateChange(
                 traffic=None, domain=domain)
             self.oxp_brick.send_event_to_observers(event, MAIN_DISPATCHER)
@@ -107,17 +107,17 @@ class Topology(app_manager.RyuApp):
         msg = ev.msg
         domain = ev.domain
         data = msg.data
-        if utils.check_model_is_compressed(domain=domain) and len(data) <= 0:
+        if utils.check_mode_is_compressed(domain=domain) and len(data) <= 0:
             return
 
         try:
             src_domain_id, src_vport_no = switches.LLDPPacket.lldp_parse(data)
             in_port = msg.match['in_port']
-            if check_model_is_hop(domain=domain):
+            if check_mode_is_hop(domain=domain):
                 link = {(domain.id, src_domain_id): (in_port, src_vport_no, 1),
                         (src_domain_id, domain.id): (src_vport_no, in_port, 1)}
                 self.topo.update_link(link)
-            elif check_model_is_bw(domain=domain):
+            elif check_mode_is_bw(domain=domain):
                 domain_topo = self.topo.domains[domain.id]
                 src_domain_topo = self.topo.domains[src_domain_id]
 

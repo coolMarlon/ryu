@@ -16,8 +16,8 @@ from ryu.openexchange.event import oxp_event
 from ryu.openexchange.oxproto_common import OXP_MAX_PERIOD
 from ryu.openexchange.database import topology_data
 from ryu.openexchange.utils.controller_id import cap_to_str
-from ryu.openexchange.utils.utils import check_model_is_advanced
-from ryu.openexchange.utils.utils import check_model_is_bw
+from ryu.openexchange.utils.utils import check_mode_is_advanced
+from ryu.openexchange.utils.utils import check_mode_is_bw
 from ryu import cfg
 from ryu.lib import hub
 
@@ -44,7 +44,7 @@ class TopoReply(app_manager.RyuApp):
         self.links = []
 
     def _monitor(self):
-        while True and check_model_is_advanced():
+        while True and check_mode_is_advanced():
             if self.domain is not None:
                 self.topo_reply()
             hub.sleep(CONF.oxp_period)

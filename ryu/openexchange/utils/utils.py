@@ -3,9 +3,9 @@ Define some utils functions.
 """
 import logging
 from ryu.ofproto.ofproto_v1_3 import OFPP_TABLE
-from ryu.openexchange.oxproto_common import OXP_ADVANCED_MODEL
-from ryu.openexchange.oxproto_common import OXP_MODEL_COMPRESSED
-from ryu.openexchange.oxproto_common import OXP_BW_MODEL, OXP_HOP_MODEL
+from ryu.openexchange.oxproto_common import OXP_ADVANCED_MODE
+from ryu.openexchange.oxproto_common import OXP_MODE_COMPRESSED
+from ryu.openexchange.oxproto_common import OXP_BW_MODE, OXP_HOP_MODE
 from ryu import cfg
 
 
@@ -22,26 +22,26 @@ def _get_flags(domain=None):
     return flags
 
 
-def check_model_is_advanced(domain=None):
-    if OXP_ADVANCED_MODEL == _get_flags(domain) & OXP_ADVANCED_MODEL:
+def check_mode_is_advanced(domain=None):
+    if OXP_ADVANCED_MODE == _get_flags(domain) & OXP_ADVANCED_MODE:
         return True
     return False
 
 
-def check_model_is_bw(domain=None):
-    if OXP_BW_MODEL == _get_flags(domain) & OXP_BW_MODEL:
+def check_mode_is_bw(domain=None):
+    if OXP_BW_MODE == _get_flags(domain) & OXP_BW_MODE:
         return True
     return False
 
 
-def check_model_is_hop(domain=None):
-    if OXP_HOP_MODEL == _get_flags(domain) & OXP_HOP_MODEL:
+def check_mode_is_hop(domain=None):
+    if OXP_HOP_MODE == _get_flags(domain) & OXP_HOP_MODE:
         return True
     return False
 
 
-def check_model_is_compressed(domain=None):
-    if OXP_MODEL_COMPRESSED == _get_flags(domain) & OXP_MODEL_COMPRESSED:
+def check_mode_is_compressed(domain=None):
+    if OXP_MODE_COMPRESSED == _get_flags(domain) & OXP_MODE_COMPRESSED:
         return True
     return False
 
@@ -217,7 +217,7 @@ def oxp_send_packet_out(domain, msg, src_port, dst_port):
     sbp_data = None
     if len(msg.data) == 0:
         return
-    if check_model_is_compressed(domain):
+    if check_mode_is_compressed(domain):
         out = _build_compressed_packet_out(domain, dst_port, msg.data)
         sbp_header = domain.oxproto_parser.OXPSBP_Header(
             type=domain.oxproto.OXPSBP_PACKET_OUT,
@@ -238,7 +238,7 @@ def oxp_send_packet_out(domain, msg, src_port, dst_port):
 
 def oxp_send_flow_mod(domain, datapath, flow_info, src_port, dst_port):
     sbp_data = None
-    if check_model_is_compressed(domain):
+    if check_mode_is_compressed(domain):
 
         forwarding_reply = domain.oxproto_parser.OXPSBP_Forwarding_Reply(
             flow_info[1], flow_info[2],

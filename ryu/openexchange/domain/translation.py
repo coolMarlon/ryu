@@ -130,7 +130,7 @@ class Translation(app_manager.RyuApp):
 
                 flow_info = (eth_type, ip_src, ip_dst, in_port)
                 _key = (eth_type, ip_src, ip_dst)
-                if utils.check_model_is_compressed():
+                if utils.check_mode_is_compressed():
                     if _key in self.abstract.buffer:
                         data_list = self.abstract.buffer[_key]
                         if len(data_list) > 0:

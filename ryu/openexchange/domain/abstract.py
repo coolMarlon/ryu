@@ -37,9 +37,9 @@ from ryu.openexchange.domain import setting
 from ryu.openexchange.routing_algorithm import routing_algorithm
 from ryu.openexchange.utils import utils
 from ryu.openexchange.utils.controller_id import cap_to_str
-from ryu.openexchange.utils.utils import check_model_is_advanced
-from ryu.openexchange.utils.utils import check_model_is_bw
-from ryu.openexchange.utils.utils import check_model_is_compressed
+from ryu.openexchange.utils.utils import check_mode_is_advanced
+from ryu.openexchange.utils.utils import check_mode_is_bw
+from ryu.openexchange.utils.utils import check_mode_is_compressed
 from ryu import cfg
 
 CONF = cfg.CONF
@@ -134,7 +134,7 @@ class Abstract(app_manager.RyuApp):
                 capability=cap_to_str(cap))
             links.append(link)
 
-            if check_model_is_advanced():
+            if check_mode_is_advanced():
                 for dst in vport:
                     if src > dst:
                         src_dpid, src_port_no = self.network.vport[src]
@@ -218,14 +218,14 @@ class Abstract(app_manager.RyuApp):
     def create_paths(self, ev):
         graph = ev.topo
         function = setting.function(CONF.oxp_flags)
-        if check_model_is_bw():
+        if check_mode_is_bw():
             self.graph = self.create_bw_graph(graph, self.link_to_port,
                                               self.free_band_width)
         result = routing_algorithm.get_paths(graph, function)
         if result:
             self.capabilities = result[0]
             self.paths = result[1]
-            if check_model_is_bw():
+            if check_mode_is_bw():
                 self.multi_paths = result[2]
             return self.paths
         self.logger.debug("Path is not found.")
@@ -238,11 +238,11 @@ class Abstract(app_manager.RyuApp):
             self.topology.paths = self.paths
 
             links = []
-            if check_model_is_bw():
+            if check_mode_is_bw():
                 links = self.create_links_bw(self.topology.ports,
                                              self.capabilities)
             else:
-                if check_model_is_advanced():
+                if check_mode_is_advanced():
                     links = self.create_links(self.topology.ports,
                                               self.capabilities)
             return links
@@ -255,7 +255,7 @@ class Abstract(app_manager.RyuApp):
 
     @set_ev_cls(oxp_event.EventOXPTopoRequest, MAIN_DISPATCHER)
     def topo_request_handler(self, ev):
-        if check_model_is_advanced():
+        if check_mode_is_advanced():
             domain = ev.msg.domain
             self.topology.domain_id = domain.id
             self.oxproto = domain.oxproto
@@ -309,7 +309,7 @@ class Abstract(app_manager.RyuApp):
         in_port = msg.match['in_port']
         sbp_data = None
 
-        if check_model_is_compressed():
+        if check_mode_is_compressed():
             sbp_data = self.packet_in_of_compressed(in_port, msg)
         else:
             msg.serialize()
