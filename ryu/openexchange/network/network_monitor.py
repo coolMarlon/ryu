@@ -119,17 +119,17 @@ class Network_Monitor(app_manager.RyuApp):
             print('---------------- ''  -------- ----------------- '
                   '-------- -------- -------- -----------')
             for dpid in bodys.keys():
-                for stat in sorted([flow for flow in bodys[dpid]
-                                    if flow.priority == 1],
-                                   key=lambda flow: (flow.match['in_port'],
-                                                     flow.match['ipv4_dst'])):
+                for stat in sorted(
+                    [flow for flow in bodys[dpid] if flow.priority == 1],
+                    key=lambda flow: (flow.match.get('in_port'),
+                                      flow.match.get('ipv4_dst'))):
                     print('%016x %8x %17s %8x %8d %8d %8.1f' % (
                         dpid,
                         stat.match['in_port'], stat.match['ipv4_dst'],
                         stat.instructions[0].actions[0].port,
                         stat.packet_count, stat.byte_count,
-                        abs(self.flow_speed[(stat.match['in_port'],
-                            stat.match['ipv4_dst'],
+                        abs(self.flow_speed[dpid][
+                            (stat.match['in_port'], stat.match['ipv4_dst'],
                             stat.instructions[0].actions[0].port)][-1])))
             print '\n'
 
@@ -159,29 +159,30 @@ class Network_Monitor(app_manager.RyuApp):
     @set_ev_cls(ofp_event.EventOFPFlowStatsReply, MAIN_DISPATCHER)
     def _flow_stats_reply_handler(self, ev):
         body = ev.msg.body
-        self.stats['flow'][ev.msg.datapath.id] = body
-        for stat in sorted([flow for flow in body if flow.priority == 1],
-                           key=lambda flow: (flow.match['in_port'],
-                                             flow.match['ipv4_dst'])):
-            key = (
-                stat.match['in_port'],  stat.match['ipv4_dst'],
-                stat.instructions[0].actions[0].port)
-            value = (
-                stat.packet_count, stat.byte_count,
-                stat.duration_sec, stat.duration_nsec)
-            self._save_stats(self.flow_stats, key, value, 3)
+        dpid = ev.msg.datapath.id
+        self.stats['flow'][dpid] = body
+        for stat in sorted(
+            [flow for flow in body if flow.priority == 1],
+            key=lambda flow: (flow.match.get('in_port'),
+                              flow.match.get('ipv4_dst'))):
+            key = (stat.match['in_port'],  stat.match['ipv4_dst'],
+                   stat.instructions[0].actions[0].port)
+            value = (stat.packet_count, stat.byte_count,
+                     stat.duration_sec, stat.duration_nsec)
+            self._save_stats(self.flow_stats[dpid], key, value, 3)
 
             # Get flow's speed.
             pre = 0
             period = SLEEP_PERIOD
-            stats = self.flow_stats[key]
+            stats = self.flow_stats[dpid][key]
             if len(stats) > 1:
                 pre = stats[-2][1]
                 period = self._get_period(stats[-1][2], stats[-1][3],
                                           stats[-2][2], stats[-2][3])
 
-            speed = self._get_speed(self.flow_stats[key][-1][1], pre, period)
-            self._save_stats(self.flow_speed, key, speed, 3)
+            speed = self._get_speed(self.flow_stats[dpid][key][-1][1],
+                                    pre, period)
+            self._save_stats(self.flow_speed[dpid], key, speed, 3)
 
     @set_ev_cls(ofp_event.EventOFPPortStatsReply, MAIN_DISPATCHER)
     def _port_stats_reply_handler(self, ev):
@@ -195,9 +196,8 @@ class Network_Monitor(app_manager.RyuApp):
             port_no = stat.port_no
             if port_no != ofproto_v1_3.OFPP_LOCAL:
                 key = (dpid, port_no)
-                value = (
-                    stat.tx_bytes, stat.rx_bytes, stat.rx_errors,
-                    stat.duration_sec, stat.duration_nsec)
+                value = (stat.tx_bytes, stat.rx_bytes, stat.rx_errors,
+                         stat.duration_sec, stat.duration_nsec)
 
                 self._save_stats(self.port_stats, key, value, 3)
 

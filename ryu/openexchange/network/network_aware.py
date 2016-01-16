@@ -2,6 +2,7 @@
 import logging
 import struct
 import time
+import copy
 import networkx as nx
 
 from operator import attrgetter
@@ -363,7 +364,7 @@ class Network_Aware(app_manager.RyuApp):
                 for j in self.graph[i].values():
                     print '%10.0f' % j['weight'],
                 print ""
-            self.pre_graph = self.graph
+            self.pre_graph = copy.deepcopy(self.graph)
 
         if self.pre_link_to_port != self.link_to_port or IS_UPDATE:
             print "---------------------Link Port---------------------"
@@ -379,7 +380,7 @@ class Network_Aware(app_manager.RyuApp):
                     else:
                         print '%10s' % "No-link",
                 print ""
-            self.pre_link_to_port = self.link_to_port
+            self.pre_link_to_port = copy.deepcopy(self.link_to_port)
 
         # each dp access host
         # {(sw,port) :[host1_ip,host2_ip,host3_ip,host4_ip]}
@@ -391,4 +392,4 @@ class Network_Aware(app_manager.RyuApp):
             else:
                 for tup in self.access_table:
                     print '%10d:    ' % tup[0], self.access_table[tup]
-            self.pre_access_table = self.access_table
+            self.pre_access_table = copy.deepcopy(self.access_table)

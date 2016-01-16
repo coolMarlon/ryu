@@ -101,18 +101,17 @@ class Network_Monitor(app_manager.RyuApp):
             print('---------------- ''  -------- ----------------- '
                   '-------- -------- -------- -----------')
             for dpid in bodys.keys():
-                for stat in sorted([flow for flow in bodys[dpid]
-                                    if flow.priority == 1],
-                                   key=lambda flow: (flow.match['in_port'],
-                                                     flow.match['ipv4_dst'])):
+                for stat in sorted(
+                    [flow for flow in bodys[dpid] if flow.priority == 1],
+                    key=lambda flow: (flow.match.get('in_port'),
+                                      flow.match.get('ipv4_dst'))):
                     print('%016x %8x %17s %8x %8d %8d %8.1f' % (
                         dpid,
                         stat.match['in_port'], stat.match['ipv4_dst'],
                         stat.instructions[0].actions[0].port,
                         stat.packet_count, stat.byte_count,
-                        abs(self.flow_speed[
-                            (stat.match['in_port'],
-                            stat.match['ipv4_dst'],
+                        abs(self.flow_speed[dpid][
+                            (stat.match['in_port'], stat.match['ipv4_dst'],
                             stat.instructions[0].actions[0].port)][-1])))
             print '\n'
 
@@ -142,32 +141,32 @@ class Network_Monitor(app_manager.RyuApp):
     @set_ev_cls(ofp_event.EventOFPFlowStatsReply, MAIN_DISPATCHER)
     def _flow_stats_reply_handler(self, ev):
         body = ev.msg.body
-        self.stats['flow'][ev.msg.datapath.id] = body
+        dpid = ev.msg.datapath.id
+        self.stats['flow'][dpid] = body
+        self.flow_stats.setdefault(dpid, {})
+        self.flow_speed.setdefault(dpid, {})
         for stat in sorted([flow for flow in body if flow.priority == 1],
-                           key=lambda flow: (flow.match['in_port'],
-                                             flow.match['ipv4_dst'])):
-            key = (
-                stat.match['in_port'],  stat.match['ipv4_dst'],
-                stat.instructions[0].actions[0].port)
-            value = (
-                stat.packet_count, stat.byte_count,
-                stat.duration_sec, stat.duration_nsec)
-            self._save_stats(self.flow_stats, key, value, 5)
+                           key=lambda flow: (flow.match.get('in_port'),
+                                             flow.match.get('ipv4_dst'))):
+            key = (stat.match['in_port'], stat.match['ipv4_dst'],
+                   stat.instructions[0].actions[0].port)
+            value = (stat.packet_count, stat.byte_count,
+                     stat.duration_sec, stat.duration_nsec)
+            self._save_stats(self.flow_stats[dpid], key, value, 5)
 
             # Get flow's speed.
             pre = 0
             period = SLEEP_PERIOD
-            tmp = self.flow_stats[key]
+            tmp = self.flow_stats[dpid][key]
             if len(tmp) > 1:
                 pre = tmp[-2][1]
-                period = self._get_period(
-                    tmp[-1][2], tmp[-1][3],
-                    tmp[-2][2], tmp[-2][3])
+                period = self._get_period(tmp[-1][2], tmp[-1][3],
+                                          tmp[-2][2], tmp[-2][3])
 
-            speed = self._get_speed(
-                self.flow_stats[key][-1][1], pre, period)
+            speed = self._get_speed(self.flow_stats[dpid][key][-1][1],
+                                    pre, period)
 
-            self._save_stats(self.flow_speed, key, speed, 5)
+            self._save_stats(self.flow_speed[dpid], key, speed, 5)
 
     @set_ev_cls(ofp_event.EventOFPPortStatsReply, MAIN_DISPATCHER)
     def _port_stats_reply_handler(self, ev):
