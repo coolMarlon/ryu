@@ -16,6 +16,6 @@ for domain in DOMAINS:
     #os.system("ssh %s@%s 'cd /opt/ryu; git pull\
     #    sudo python setup.py install'" % (USER, domain))
 
-    os.system("scp -r ./* %s@%s:/opt/ryu" % (USER, domain))
-    os.system("ssh %s@%s 'cd /opt/ryu; \
+    os.system("cd ..; tar zcvf ryu.tar.gz ryu;sudo scp ryu.tar.gz %s@%s:/opt" % (USER, domain))
+    os.system("ssh %s@%s 'cd /opt;sudo tar zxvf ryu.tar.gz;cd ryu; \
         sudo python setup.py install'" % (USER, domain))
