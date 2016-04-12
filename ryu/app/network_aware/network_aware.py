@@ -2,6 +2,7 @@
 import logging
 import struct
 import copy
+import networkx as nx
 from operator import attrgetter
 from ryu.base import app_manager
 from ryu.controller import ofp_event
@@ -48,10 +49,10 @@ class Network_Aware(app_manager.RyuApp):
 
         self.outer_ports = {}
 
-        self.graph = {}
-
+        self.graph = nx.DiGraph()
         self.pre_link_to_port = {}
-        self.pre_graph = {}
+        self.pre_graph = nx.DiGraph()
+
         self.pre_access_table = {}
 
         self.discover_thread = hub.spawn(self._discover)
@@ -104,13 +105,11 @@ class Network_Aware(app_manager.RyuApp):
     def get_graph(self, link_list):
         for src in self.switches:
             for dst in self.switches:
-                self.graph.setdefault(src, {dst: float('inf')})
+                self.graph.add_edge(src, dst, weight=float('inf'))
                 if src == dst:
-                    self.graph[src][src] = 0
+                    self.graph.add_edge(src, dst, weight=0)
                 elif (src, dst) in link_list:
-                    self.graph[src][dst] = 1
-                else:
-                    self.graph[src][dst] = float('inf')
+                    self.graph.add_edge(src, dst, weight=1)
         return self.graph
 
     def create_port_map(self, switch_list):
@@ -194,20 +193,20 @@ class Network_Aware(app_manager.RyuApp):
 
     # show topo
     def show_topology(self):
-        switch_num = len(self.graph)
+        switch_num = len(self.graph.nodes())
         if self.pre_graph != self.graph or IS_UPDATE:
             print "---------------------Topo Link---------------------"
             print '%10s' % ("switch"),
             for i in xrange(1, switch_num + 1):
                 print '%10d' % i,
             print ""
-            for i in self.graph.keys():
+            for i in self.graph.nodes():
                 print '%10d' % i,
                 for j in self.graph[i].values():
-                    print '%10.0f' % j,
+                    print '%10.0f' % j['weight'],
                 print ""
             self.pre_graph = copy.deepcopy(self.graph)
-        # show link
+
         if self.pre_link_to_port != self.link_to_port or IS_UPDATE:
             print "---------------------Link Port---------------------"
             print '%10s' % ("switch"),
