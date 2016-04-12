@@ -27,6 +27,7 @@ from ryu.lib.packet import packet
 from ryu.lib.packet import ethernet
 from ryu.lib.packet import arp
 from ryu.lib.packet import ipv4
+from ryu.lib.packet import ipv6
 from ryu.lib.packet import icmp
 from ryu import utils
 import socket
@@ -75,7 +76,7 @@ class MULTIPATH_13(app_manager.RyuApp):
         match = parser.OFPMatch()
         actions = [parser.OFPActionOutput(ofproto.OFPP_CONTROLLER,
                                           ofproto.OFPCML_NO_BUFFER)]
-        self.add_flow(datapath, 1, 0, match, actions)
+        self.add_flow(datapath, 0, 0, match, actions)
         self.logger.info("switch:%s connected", dpid)
 
     def add_flow(self, datapath, hard_timeout, priority, match, actions):
@@ -114,9 +115,17 @@ class MULTIPATH_13(app_manager.RyuApp):
         dst = eth.dst
         src = eth.src
         dpid = datapath.id
+        arp_pkt = pkt.get_protocol(arp.arp)
+        ip_pkt = pkt.get_protocol(ipv4.ipv4)
+        ipv6_pkt = pkt.get_protocol(ipv6.ipv6)
+
+        if isinstance(ipv6_pkt, ipv6.ipv6):
+            print "ipv6 return"
+            return
 
         header_list = dict(
             (p.protocol_name, p)for p in pkt.protocols if type(p) != str)
+
         if ARP in header_list:
             self.arp_table[header_list[ARP].src_ip] = src  # ARP learning
             #print "ARP"

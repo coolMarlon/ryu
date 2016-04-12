@@ -54,8 +54,6 @@ def ofp_msg_to_ev_cls(msg_cls):
 
 def _create_ofp_msg_ev_class(msg_cls):
     name = _ofp_msg_name_to_ev_name(msg_cls.__name__)
-    # print 'creating ofp_event %s' % name
-
     if name in _OFP_MSG_EVENTS:
         return
 
@@ -67,7 +65,6 @@ def _create_ofp_msg_ev_class(msg_cls):
 
 
 def _create_ofp_msg_ev_from_module(ofp_parser):
-    # print mod
     for _k, cls in inspect.getmembers(ofp_parser, inspect.isclass):
         if not hasattr(cls, 'cls_msg_type'):
             continue
@@ -76,7 +73,6 @@ def _create_ofp_msg_ev_from_module(ofp_parser):
 
 for ofp_mods in ofproto.get_ofp_modules().values():
     ofp_parser = ofp_mods[1]
-    # print 'loading module %s' % ofp_parser
     _create_ofp_msg_ev_from_module(ofp_parser)
 
 
