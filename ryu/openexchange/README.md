@@ -30,6 +30,7 @@ You can config OXP deployment by OXP_CFG.py.
 ###Implementation
 
 * create user:group for oxp.
+
 * sudo permission
     enable use of OXP can using sudo without password. sudo visudo, and add info below.
 
@@ -44,13 +45,13 @@ You can config OXP deployment by OXP_CFG.py.
 
         python oxp_install.py
 
-* deploy OXP
+* run OXP
 
-        python deploy.py
+        python oxp_run.py
 
 ###Test
 
-You can modify /openexchange/test/multi_network.py to test Open eXchange Protocol.
+You can modify /openexchange/test/multi\_network.py to test Open eXchange Protocol.
 
 
 
