@@ -26,7 +26,7 @@ def multiControllerNet(con_num=7, sw_num=35, host_num=70):
     switch_list = []
     host_list = []
 
-    inter_bw = 500
+    inter_bw = 50
 
     logger = logging.getLogger('ryu.openexchange.test.multi_network')
 
@@ -103,6 +103,9 @@ def multiControllerNet(con_num=7, sw_num=35, host_num=70):
         _No += 1
 
     logger.info("*** Setting OpenFlow version")
+    for sw in switch_list:
+        cmd = "sudo ovs-vsctl set bridge %s protocols=OpenFlow13" % sw
+        os.system(cmd)
 
     logger.info("*** Running CLI")
     CLI(net)
