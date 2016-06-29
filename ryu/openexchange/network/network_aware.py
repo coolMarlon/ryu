@@ -126,7 +126,7 @@ class Network_Aware(app_manager.RyuApp):
     def get_graph(self, link_list):
         for src in self.switches:
             for dst in self.switches:
-                self.graph.add_edge(src, dst, weight=float('inf'))
+                # self.graph.add_edge(src, dst, weight=float('inf'))
                 if src == dst:
                     self.graph.add_edge(src, dst, weight=0)
                 elif (src, dst) in link_list:

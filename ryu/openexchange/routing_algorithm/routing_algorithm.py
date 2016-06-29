@@ -196,7 +196,10 @@ def band_width_compare(graph, paths, best_paths, topo=None):
                     capabilities[src][src] = OXP_MAX_CAPACITY
                     continue
                 max_bw_of_paths = 0
-                best_path = paths[src][dst][0]
+                if len(paths[src][dst]):
+                    best_path = paths[src][dst][0]
+                else:
+                    continue
                 for path in paths[src][dst]:
                     min_bw = OXP_MAX_CAPACITY
                     min_bw = get_min_bw_of_links(graph, path, min_bw)
@@ -248,11 +251,16 @@ def best_paths_by_bw(graph, src=None, topo=None):
             path_generator = k_shortest_paths(_graph, src, dst)
 
             k = CONF.oxp_k_paths
-            for path in path_generator:
-                if k <= 0:
-                    break
-                paths[src][dst].append(path)
-                k -= 1
+            try:
+                for path in path_generator:
+                    if k <= 0:
+                        break
+                    paths[src][dst].append(path)
+                    k -= 1
+            except:
+                paths[src][dst] = []
+                LOG.debug("No path between %s and %s." % (src, dst))
+
     # find best path by comparing bandwidth.
     capabilities, best_paths = band_width_compare(_graph, paths,
                                                   best_paths, topo)
