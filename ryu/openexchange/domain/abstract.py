@@ -52,19 +52,19 @@ class Abstract(app_manager.RyuApp):
     OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
 
     _CONTEXTS = {
-        "Network_Aware": network_aware.Network_Aware,
-        "Network_Monitor": network_monitor.Network_Monitor,
+        "Awareness": network_aware.NetworkAwareness,
+        "Monitor": network_monitor.NetworkMonitor,
     }
 
     def __init__(self, *args, **kwargs):
         super(Abstract, self).__init__(*args, **kwargs)
         self.name = 'oxp_abstract'
         self.args = args
-        self.network = kwargs["Network_Aware"]
-        self.monitor = kwargs["Network_Monitor"]
-        self.link_to_port = self.network.link_to_port
-        self.graph = self.network.graph
-        self.access_table = self.network.access_table
+        self.awareness = kwargs["Awareness"]
+        self.monitor = kwargs["Monitor"]
+        self.link_to_port = self.awareness.link_to_port
+        self.graph = self.awareness.graph
+        self.access_table = self.awareness.access_table
 
         self.free_band_width = self.monitor.free_band_width
         self.domain = app_manager.lookup_service_brick('oxp_event').domain
@@ -123,7 +123,7 @@ class Abstract(app_manager.RyuApp):
     def create_links_bw(self, vport=[], capabilities={}):
         links = []
         for src in vport:
-            src_dpid, src_port_no = self.network.vport[src]
+            src_dpid, src_port_no = self.awareness.vport[src]
             cap = OXP_MAX_CAPACITY
             if src_dpid in self.free_band_width:
                 if src_port_no in self.free_band_width[src_dpid]:
@@ -137,8 +137,8 @@ class Abstract(app_manager.RyuApp):
             if check_mode_is_advanced():
                 for dst in vport:
                     if src > dst:
-                        src_dpid, src_port_no = self.network.vport[src]
-                        dst_dpid, dst_port_no = self.network.vport[dst]
+                        src_dpid, src_port_no = self.awareness.vport[src]
+                        dst_dpid, dst_port_no = self.awareness.vport[dst]
                         if src_dpid in capabilities:
                             if dst_dpid in capabilities[src_dpid]:
                                 cap = capabilities[src_dpid][dst_dpid]
@@ -161,8 +161,8 @@ class Abstract(app_manager.RyuApp):
         for src in vport:
             for dst in vport:
                 if src > dst:
-                    src_dpid, src_port_no = self.network.vport[src]
-                    dst_dpid, dst_port_no = self.network.vport[dst]
+                    src_dpid, src_port_no = self.awareness.vport[src]
+                    dst_dpid, dst_port_no = self.awareness.vport[dst]
                     if src_dpid in capabilities:
                         if dst_dpid in capabilities[src_dpid]:
                             cap = capabilities[src_dpid][dst_dpid]
@@ -232,7 +232,7 @@ class Abstract(app_manager.RyuApp):
         return None
 
     def get_link_capabilities(self):
-        self.topology.ports = self.network.vport.keys()
+        self.topology.ports = self.awareness.vport.keys()
         if len(self.topology.ports):
             self.topology.capabilities = self.capabilities
             self.topology.paths = self.paths

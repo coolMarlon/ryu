@@ -19,21 +19,21 @@ from ryu.ofproto.ofproto_v1_3 import OFPP_TABLE
 
 class Shortest_forwarding(app_manager.RyuApp):
     OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
-    _CONTEXTS = {"Network_Aware": network_aware.Network_Aware}
+    _CONTEXTS = {"Awareness": network_aware.NetworkAwareness}
 
     def __init__(self, *args, **kwargs):
         super(Shortest_forwarding, self).__init__(*args, **kwargs)
         self.name = 'shortest_forwarding'
-        self.network_aware = kwargs["Network_Aware"]
-        self.datapaths = self.network_aware.datapaths
+        self.awareness = kwargs["Awareness"]
+        self.datapaths = self.awareness.datapaths
 
         # links   :(src_dpid,dst_dpid)->(src_port,dst_port)
-        self.link_to_port = self.network_aware.link_to_port
+        self.link_to_port = self.awareness.link_to_port
 
         # {sw :[host1_ip,host2_ip,host3_ip,host4_ip]}
-        self.access_table = self.network_aware.access_table
-        self.access_ports = self.network_aware.access_ports
-        self.outer_ports = self.network_aware.outer_ports
+        self.access_table = self.awareness.access_table
+        self.access_ports = self.awareness.access_ports
+        self.outer_ports = self.awareness.outer_ports
         self.abstract = app_manager.lookup_service_brick('oxp_abstract')
 
     def get_path(self, src, dst):
@@ -46,8 +46,8 @@ class Shortest_forwarding(app_manager.RyuApp):
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
 
-        for dpid in self.network_aware.access_ports:
-            for port in self.network_aware.access_ports[dpid]:
+        for dpid in self.awareness.access_ports:
+            for port in self.awareness.access_ports[dpid]:
                 if (dpid, port) not in self.access_table.keys():
                     datapath = self.datapaths[dpid]
                     out = utils._build_packet_out(
@@ -60,7 +60,7 @@ class Shortest_forwarding(app_manager.RyuApp):
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
 
-        result = self.network_aware.get_host_location(dst_ip)
+        result = self.awareness.get_host_location(dst_ip)
         if result:  # host record in access table.
             datapath_dst, out_port = result[0], result[1]
             datapath = self.datapaths[datapath_dst]
@@ -74,15 +74,15 @@ class Shortest_forwarding(app_manager.RyuApp):
     def get_sw(self, dpid, in_port, src, dst):
         src_sw = dpid
         dst_sw = None
-        
-        src_location = self.network_aware.get_host_location(src)
+
+        src_location = self.awareness.get_host_location(src)
         if in_port in self.access_ports[dpid]:
             if (dpid,  in_port) == src_location:
                 src_sw = src_location[0]
             else:
                 return None
 
-        dst_location = self.network_aware.get_host_location(dst)
+        dst_location = self.awareness.get_host_location(dst)
         if dst_location:
             dst_sw = dst_location[0]
 
@@ -104,8 +104,8 @@ class Shortest_forwarding(app_manager.RyuApp):
                                    self.access_table, path, flow_info,
                                    msg.buffer_id, msg.data)
                 # wait for barrier reply.
-                #utils.send_packet_out(self.datapaths[path[0]], msg.buffer_id,
-                #                      msg.match['in_port'], OFPP_TABLE, msg.data)
+                # utils.send_packet_out(self.datapaths[path[0]], msg.buffer_id,
+                # msg.match['in_port'], OFPP_TABLE, msg.data)
         return
 
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)

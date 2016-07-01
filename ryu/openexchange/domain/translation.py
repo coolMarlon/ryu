@@ -27,7 +27,7 @@ class Translation(app_manager.RyuApp):
     def __init__(self, *args, **kwargs):
         super(Translation, self).__init__(*args, **kwargs)
         self.name = 'oxp_translation'
-        self.network = app_manager.lookup_service_brick("Network_Aware")
+        self.network = app_manager.lookup_service_brick("awareness")
         self.abstract = app_manager.lookup_service_brick('oxp_abstract')
         self.buffer = {}
         self.buffer_id = 0

@@ -17,13 +17,13 @@ CONF = cfg.CONF
 SLEEP_PERIOD = CONF.oxp_period + 2
 
 
-class Network_Monitor(app_manager.RyuApp):
+class NetworkMonitor(app_manager.RyuApp):
     OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
-    _NAME = 'Network_Monitor'
+    _NAME = 'monitor'
     _EVENT = [oxp_event.EventOXPTrafficStateChange]
 
     def __init__(self, *args, **kwargs):
-        super(Network_Monitor, self).__init__(*args, **kwargs)
+        super(NetworkMonitor, self).__init__(*args, **kwargs)
 
         self.datapaths = {}
         self.port_stats = {}

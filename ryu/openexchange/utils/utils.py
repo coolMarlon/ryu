@@ -282,7 +282,7 @@ def oxp_install_flow(domains, link2port, access_table,
     # inter_link
     if len(path) > 2:
         for i in xrange(1, len(path) - 1):
-            port = get_link2port(link2port, path[i-1], path[i])
+            port = get_link2port(link2port, path[i - 1], path[i])
             port_next = get_link2port(link2port, path[i], path[i + 1])
             if port and port_next:
                 src_port, dst_port = port[1], port_next[0]

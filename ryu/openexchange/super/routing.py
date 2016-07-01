@@ -14,8 +14,6 @@ from ryu.lib.packet import ethernet
 from ryu.lib.packet import ipv4
 from ryu.lib.packet import arp
 
-from ryu.openexchange.network import network_aware
-from ryu.openexchange.network import network_monitor
 from ryu.openexchange.domain import setting
 from ryu.openexchange.routing_algorithm.routing_algorithm import get_paths
 from ryu.openexchange.utils import utils

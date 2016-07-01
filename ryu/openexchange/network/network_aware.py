@@ -35,7 +35,7 @@ CONF = cfg.CONF
 IS_UPDATE = True
 
 
-class Network_Aware(app_manager.RyuApp):
+class NetworkAwareness(app_manager.RyuApp):
     OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
 
     _EVENT = [oxp_event.EventOXPVportStateChange,
@@ -43,8 +43,8 @@ class Network_Aware(app_manager.RyuApp):
               oxp_event.EventOXPTopoStateChange]
 
     def __init__(self, *args, **kwargs):
-        super(Network_Aware, self).__init__(*args, **kwargs)
-        self.name = "Network_Aware"
+        super(NetworkAwareness, self).__init__(*args, **kwargs)
+        self.name = "awareness"
         self.topology_api_app = self
         self.datapaths = {}
         self.link_to_port = {}  # (src_dpid,dst_dpid)->(src_port,dst_port)

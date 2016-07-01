@@ -21,13 +21,13 @@ from ryu.ofproto.ofproto_v1_3 import OFPP_TABLE
 
 class Network_Basic_Handler(app_manager.RyuApp):
     OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
-    _CONTEXTS = {"Network_Aware": network_aware.Network_Aware}
+    _CONTEXTS = {"Awareness": network_aware.NetworkAwareness}
 
     def __init__(self, *args, **kwargs):
         super(Network_Basic_Handler, self).__init__(*args, **kwargs)
         self.name = 'network_basic_handler'
-        self.network_aware = kwargs["Network_Aware"]
-        self.outer_ports = self.network_aware.outer_ports
+        self.awareness = kwargs["Awareness"]
+        self.outer_ports = self.awareness.outer_ports
         self.translation = lookup_service_brick('oxp_translation')
 
     def outer_arp_handler(self, msg, src_ip, dst_ip):
@@ -36,11 +36,11 @@ class Network_Basic_Handler(app_manager.RyuApp):
         parser = datapath.ofproto_parser
 
         # dst in other domain, send to super and return.
-        result = self.network_aware.get_host_location(dst_ip)
+        result = self.awareness.get_host_location(dst_ip)
         if self.translation is None:
             self.translation = lookup_service_brick('oxp_translation')
         if dst_ip in self.translation.outer_hosts or result is None:
-            self.network_aware.raise_sbp_packet_in_event(
+            self.awareness.raise_sbp_packet_in_event(
                 msg, ofproto_v1_3.OFPP_LOCAL, msg.data)
 
     def outer_domain_pkt_handler(self, msg, eth_type, ip_src, ip_dst):
@@ -49,8 +49,8 @@ class Network_Basic_Handler(app_manager.RyuApp):
         parser = datapath.ofproto_parser
         src_sw = dst_sw = None
 
-        src_location = self.network_aware.get_host_location(ip_src)
-        dst_location = self.network_aware.get_host_location(ip_dst)
+        src_location = self.awareness.get_host_location(ip_src)
+        dst_location = self.awareness.get_host_location(ip_dst)
         if src_location:
             src_sw = src_location[0]
         else:
@@ -66,7 +66,7 @@ class Network_Basic_Handler(app_manager.RyuApp):
         if dst_sw is None:
             # dst is not in domian,raise sbp event.
             if isinstance(msg, parser.OFPPacketIn):
-                self.network_aware.raise_sbp_packet_in_event(
+                self.awareness.raise_sbp_packet_in_event(
                     msg, ofproto_v1_3.OFPP_LOCAL, msg.data)
 
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)

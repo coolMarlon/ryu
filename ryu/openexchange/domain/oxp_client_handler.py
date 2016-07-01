@@ -61,7 +61,7 @@ class OXP_Client_Handler(app_manager.RyuApp):
         self.domain = None
         self.oxproto = oxproto_v1_0
         self.oxparser = oxproto_v1_0_parser
-        self.network_aware = app_manager.lookup_service_brick("Network_Aware")
+        self.awareness = app_manager.lookup_service_brick("awareness")
         self.fake_datapath = None
 
     def start(self):
@@ -293,7 +293,7 @@ class OXP_Client_Handler(app_manager.RyuApp):
         domain = msg.domain
         parser = domain.oxproto_parser
         data = msg.data
-        datapath = self.network_aware.fake_datapath
+        datapath = self.awareness.fake_datapath
 
         if check_mode_is_compressed():
             self.sbp_parser_of_compressed(domain, datapath, parser, data)

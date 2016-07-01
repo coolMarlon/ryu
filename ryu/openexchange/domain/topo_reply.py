@@ -29,13 +29,13 @@ class TopoReply(app_manager.RyuApp):
 
     OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
 
-    _CONTEXTS = {"Network_Aware": network_aware.Network_Aware}
+    _CONTEXTS = {"Awareness": network_aware.NetworkAwareness}
 
     def __init__(self, *args, **kwargs):
         super(TopoReply, self).__init__(*args, **kwargs)
         self.name = 'oxp_toporeply'
         self.args = args
-        self.network = kwargs["Network_Aware"]
+        self.network = kwargs["Awareness"]
         self.domain = None
         self.oxparser = None
         self.topology = topology_data.Domain()

@@ -13,7 +13,7 @@ from ryu import cfg
 CONF = cfg.CONF
 
 
-class features(object):
+class Features(object):
     def __init__(self,
                  domain_id=features['domain_id'],
                  proto_type=features['proto_type'],
