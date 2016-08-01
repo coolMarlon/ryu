@@ -30,7 +30,6 @@ class Routing(app_manager.RyuApp):
         self.domains = {}
         self.graph = nx.DiGraph()
         self.paths = {}
-        self.capabilities = {}
 
     @set_ev_cls(oxp_event.EventOXPStateChange,
                 [MAIN_DISPATCHER, DEAD_DISPATCHER])
@@ -88,12 +87,11 @@ class Routing(app_manager.RyuApp):
         self.graph = self.get_bw_graph(self.graph, self.topology.links)
         self.get_path(self.graph, None, ev.domain.flags)
 
-    def get_path(self, graph, src, flags):
+    def get_path(self, graph, flags):
         function = None
         function = setting.function(flags)
-        result = get_paths(graph, function, src, self.topology)
+        result = get_paths(graph, function, None, self.topology)
         if result:
-            self.capabilities = result[0]
             self.paths = result[1]
             return self.paths
 
@@ -108,11 +106,11 @@ class Routing(app_manager.RyuApp):
 
     def _get_topology(self, domain):
         self.graph = self.get_graph(self.topology.links, self.domains)
-        self.get_path(self.graph, None, domain.flags)
+        self.get_path(self.graph, domain.flags)
 
     @set_ev_cls(oxp_event.EventOXPTopoReply, MAIN_DISPATCHER)
     def get_path_dict(self, ev):
-        self.get_path(self.graph, None, ev.msg.domain.flags)
+        self.get_path(self.graph, ev.msg.domain.flags)
 
     def arp_forwarding(self, domain, msg, arp_dst_ip):
         src_domain = domain
@@ -135,26 +133,34 @@ class Routing(app_manager.RyuApp):
                                           ofproto.OFPP_CONTROLLER,
                                           ofproto.OFPP_LOCAL)
 
-    def shortest_forwarding(self, domain, msg, eth_type, ip_src, ip_dst):
+    def _shortest_forwarding(self, domain, msg, eth_type, ip_src, ip_dst):
         src_domain = dst_domain = None
         src_domain = self.get_host_location(ip_src)
         dst_domain = self.get_host_location(ip_dst)
-
-        if self.paths:
-            if dst_domain:
+        if dst_domain:
+            try:
                 path = self.paths[src_domain][dst_domain]
-                self.logger.info("Path[%s-->%s]:%s" % (ip_src, ip_dst, path))
+            except Exception, e:
+                self.logger.info("Path is not found")
+                return
+            self.logger.info("Path[%s-->%s]:%s" % (ip_src, ip_dst, path))
 
-                access_table = {}
-                for domain_id in self.location.locations:
-                    access_table[(domain_id, ofproto_v1_3.OFPP_LOCAL
-                                  )] = self.location.locations[domain_id]
+            access_table = {}
+            for domain_id in self.location.locations:
+                access_table[(domain_id, ofproto_v1_3.OFPP_LOCAL
+                              )] = self.location.locations[domain_id]
 
-                flow_info = (eth_type, ip_src, ip_dst, msg.match['in_port'])
-                utils.oxp_install_flow(self.domains, self.topology.links,
-                                       access_table, path, flow_info, msg)
+            flow_info = (eth_type, ip_src, ip_dst, msg.match['in_port'])
+            utils.oxp_install_flow(self.domains, self.topology.links,
+                                   access_table, path, flow_info, msg)
+        return None
+
+    def shortest_forwarding(self, domain, msg, eth_type, ip_src, ip_dst):
+        if self.paths:
+            self._shortest_forwarding(domain, msg, eth_type, ip_src, ip_dst)
         else:
             self._get_topology(domain)
+            self._shortest_forwarding(domain, msg, eth_type, ip_src, ip_dst)
 
     @set_ev_cls(oxp_event.EventOXPSBPPacketIn, MAIN_DISPATCHER)
     def _sbp_packet_in_handler(self, ev):
