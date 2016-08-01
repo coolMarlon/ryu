@@ -236,13 +236,18 @@ class OXP_Server_Handler(ryu.base.app_manager.RyuApp):
         default_buffer_id = datapath.ofproto.OFP_NO_BUFFER
 
         if sbp_header.type == oxproto_v1_0.OXPSBP_FORWARDING_REQUEST:
-            # generate a packet_in
+            # A Compressed msg will be transformed to OpenFlow packet_in msg
+            # so that super controller can handle it in the OpenFlow handler.
+
+            # When an ARP or an LLDP packet raise an packet in,
+            # compressed msg will carry data.
             request = parser.OXPSBP_Forwarding_Request.parser(
                 buf, oxproto_v1_0.OXP_SBP_COMPRESSED_HEADER_SIZE)
-            pkt_data = ''
 
+            pkt_data = ''
             if sbp_header.flags == oxproto_v1_0.OXPSBP_FLAGS_CARRY:
                 pkt_data = request.data
+
             if CONF.sbp_proto_type == oxproto_v1_0.OXPS_OPENFLOW:
                 match = ofp_parser.OFPMatch(
                     in_port=request.in_port, eth_type=request.eth_type,
@@ -260,7 +265,7 @@ class OXP_Server_Handler(ryu.base.app_manager.RyuApp):
 
     @set_ev_handler(oxp_event.EventOXPSBP, MAIN_DISPATCHER)
     def SBP_handler(self, ev):
-        # Parser the msg and raise an event.
+        # Parse the msg and raise an event.
         # Handle event in service or app.
         msg = ev.msg
         domain = msg.domain

@@ -12,6 +12,7 @@ from ryu.lib.packet import packet
 from ryu.lib.packet import ethernet
 from ryu.lib.packet import ipv4
 from ryu.lib.packet import arp
+from ryu.lib.packet.ether_types import ETH_TYPE_IP
 from ryu.openexchange.network import network_aware
 from ryu.openexchange.utils import utils
 from ryu.ofproto.ofproto_v1_3 import OFPP_TABLE
@@ -88,7 +89,7 @@ class Shortest_forwarding(app_manager.RyuApp):
 
         return src_sw, dst_sw
 
-    def shortest_forwarding(self, msg, eth_type, ip_src, ip_dst):
+    def shortest_forwarding(self, msg, ip_src, ip_dst):
         datapath = msg.datapath
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
@@ -99,13 +100,15 @@ class Shortest_forwarding(app_manager.RyuApp):
             src_sw, dst_sw = result[0], result[1]
             if dst_sw:
                 path = self.get_path(src_sw, dst_sw)
-                flow_info = (eth_type, ip_src, ip_dst, in_port)
+                self.logger.info("Path[%s-->%s]:%s" % (ip_src, ip_dst, path))
+                flow_info = (ETH_TYPE_IP, ip_src, ip_dst, in_port)
                 utils.install_flow(self.datapaths, self.link_to_port,
                                    self.access_table, path, flow_info,
                                    msg.buffer_id, msg.data)
                 # wait for barrier reply.
-                # utils.send_packet_out(self.datapaths[path[0]], msg.buffer_id,
-                # msg.match['in_port'], OFPP_TABLE, msg.data)
+                #utils.send_packet_out(self.datapaths[path[0]], msg.buffer_id,
+                #                      msg.match['in_port'],
+                #                      OFPP_TABLE, msg.data)
         return
 
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
@@ -133,5 +136,4 @@ class Shortest_forwarding(app_manager.RyuApp):
 
         if isinstance(ip_pkt, ipv4.ipv4):
             if len(pkt.get_protocols(ethernet.ethernet)):
-                eth_type = pkt.get_protocols(ethernet.ethernet)[0].ethertype
-                self.shortest_forwarding(msg, eth_type, ip_pkt.src, ip_pkt.dst)
+                self.shortest_forwarding(msg, ip_pkt.src, ip_pkt.dst)

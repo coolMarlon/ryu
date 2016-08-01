@@ -13,6 +13,7 @@ from ryu.lib.packet import packet
 from ryu.lib.packet import ethernet
 from ryu.lib.packet import ipv4
 from ryu.lib.packet import arp
+from ryu.lib.packet.ether_types import ETH_TYPE_IP
 
 from ryu.openexchange.domain import setting
 from ryu.openexchange.routing_algorithm.routing_algorithm import get_paths
@@ -133,7 +134,7 @@ class Routing(app_manager.RyuApp):
                                           ofproto.OFPP_CONTROLLER,
                                           ofproto.OFPP_LOCAL)
 
-    def _shortest_forwarding(self, domain, msg, eth_type, ip_src, ip_dst):
+    def _shortest_forwarding(self, domain, msg, ip_src, ip_dst):
         src_domain = dst_domain = None
         src_domain = self.get_host_location(ip_src)
         dst_domain = self.get_host_location(ip_dst)
@@ -150,17 +151,18 @@ class Routing(app_manager.RyuApp):
                 access_table[(domain_id, ofproto_v1_3.OFPP_LOCAL
                               )] = self.location.locations[domain_id]
 
-            flow_info = (eth_type, ip_src, ip_dst, msg.match['in_port'])
+            flow_info = (ETH_TYPE_IP, ip_src, ip_dst, msg.match['in_port'])
             utils.oxp_install_flow(self.domains, self.topology.links,
                                    access_table, path, flow_info, msg)
         return None
 
-    def shortest_forwarding(self, domain, msg, eth_type, ip_src, ip_dst):
+    def shortest_forwarding(self, domain, msg, ip_src, ip_dst):
         if self.paths:
-            self._shortest_forwarding(domain, msg, eth_type, ip_src, ip_dst)
+            self._shortest_forwarding(domain, msg, ip_src, ip_dst)
         else:
+            # if self.paths is None, get it and handle the packet.
             self._get_topology(domain)
-            self._shortest_forwarding(domain, msg, eth_type, ip_src, ip_dst)
+            self._shortest_forwarding(domain, msg, ip_src, ip_dst)
 
     @set_ev_cls(oxp_event.EventOXPSBPPacketIn, MAIN_DISPATCHER)
     def _sbp_packet_in_handler(self, ev):
@@ -172,15 +174,23 @@ class Routing(app_manager.RyuApp):
         arp_pkt = pkt.get_protocol(arp.arp)
         ip_pkt = pkt.get_protocol(ipv4.ipv4)
 
+        # ARP packet will be handled in both Normal and Compressed mode.
         if isinstance(arp_pkt, arp.arp):
             self.arp_forwarding(domain, msg, arp_pkt.dst_ip)
-
+            return
+        # IPv4 packet will be handle at Normal mode.
         if isinstance(ip_pkt, ipv4.ipv4):
-            eth_type = pkt.get_protocols(ethernet.ethernet)[0].ethertype
-            self.shortest_forwarding(domain, msg, eth_type,
-                                     ip_pkt.src, ip_pkt.dst)
-        if utils.check_mode_is_compressed(domain=domain) and len(data) <= 0:
-            eth_type = msg.match['eth_type']
+            self.shortest_forwarding(domain, msg, ip_pkt.src, ip_pkt.dst)
+            return
+
+        # In compressed mode, compressed msg will be transformed to OpenFlow
+        # msg by function:oxp_sever_handelr.sbp_parser_of_compressed.
+        # In this way, both data can be handled by shortest_forwarding.
+
+        # checkout the data's length for filting LLDP packet.
+
+        if utils.check_mode_is_compressed(domain=domain) and len(data) == 0:
             src = msg.match['ipv4_src']
             dst = msg.match['ipv4_dst']
-            self.shortest_forwarding(domain, msg, eth_type, src, dst)
+            self.shortest_forwarding(domain, msg, src, dst)
+            return

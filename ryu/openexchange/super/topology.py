@@ -103,9 +103,12 @@ class Topology(app_manager.RyuApp):
         self.location.update(domain.id, msg.hosts)
 
     @set_ev_cls(oxp_event.EventOXPSBPPacketIn, MAIN_DISPATCHER)
-    def sbp_packet_in_handler(self, ev):
+    def update_inter_links_by_parsing_lldp(self, ev):
         msg = ev.msg
         domain = ev.domain
+
+        # Check the data's length, if data is None, this packet is not
+        # a LLDP packet, return directly.
         data = msg.data
         if utils.check_mode_is_compressed(domain=domain) and len(data) <= 0:
             return
@@ -136,6 +139,7 @@ class Topology(app_manager.RyuApp):
             else:
                 pass
 
+            # send LinkDiscovery event to it's observers.
             event = oxp_event.EventOXPLinkDiscovery(domain)
             self.oxp_brick.send_event_to_observers(event, MAIN_DISPATCHER)
 

@@ -18,6 +18,7 @@ from ryu.lib.packet import ethernet
 from ryu.lib.packet import ipv4
 from ryu.lib.packet import arp
 from ryu.lib.packet import lldp
+from ryu.lib.packet.ether_types import ETH_TYPE_IP
 
 from ryu.controller.handler import MAIN_DISPATCHER, DEAD_DISPATCHER
 from ryu.topology import switches
@@ -272,7 +273,7 @@ class Abstract(app_manager.RyuApp):
         ip_pkt = pkt.get_protocol(ipv4.ipv4)
         lldp_pkt = pkt.get_protocol(lldp.lldp)
 
-        eth_type = 0x800
+        eth_type = ETH_TYPE_IP
         if len(pkt.get_protocols(ethernet.ethernet)):
             eth_type = pkt.get_protocols(ethernet.ethernet)[0].ethertype
         sbp_header = self.oxparser.OXPSBP_Header(type=1)

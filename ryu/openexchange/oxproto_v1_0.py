@@ -109,17 +109,19 @@ assert calcsize(OXP_HEADER_PACK_STR) == OXP_HEADER_SIZE
 
 # Define constants
 OXP_DEFAULT_MISS_SENDD_LEN = 128
-OXPC_PERIOD = 10                 # Period of send domain network's info.
+OXPC_PERIOD = 10                # Period of send domain network's info.
 
 # Enum oxp_config_flags
-OXPC_MODE_ADVANCED = 1         # Send the intra-links' capability
+OXPC_MODE_SIMPLE = 0
+OXPC_MODE_ADVANCED = 1          # Send the intra-links' capability
 OXPC_CAP_BW = 1 << 1            # Bandwidth
 OXPC_CAP_DELAY = 1 << 2         # Delay
 OXPC_CAP_HOP = 1 << 3           # Hop
-OXPC_MODE_COMPRESSED = 1 << 4  # Compress the packet_in message
-OXPC_MODE_TRUST = 1 << 5       # Trust the adjacent domain network.
+OXPC_MODE_COMPRESSED = 1 << 4   # Compress the packet_in message
+                                # NO_SET means NORMAL mode.
+OXPC_MODE_TRUST = 1 << 5        # Trust the adjacent domain network.
 
-OXPC_MODE_DEFAULT = 24         # not use.
+OXPC_MODE_DEFAULT = 24          # not use.
 
 
 OXP_DOMAIN_CONFIG_PACK_STR = '!BBH'
@@ -181,8 +183,8 @@ OXPBRC_BAD_LEN = 5,                 # Wrong request length for type.
 # Enum oxp_domain_config_failed_code
 OXPBRC_BAD_VERSION = 0,              # oxp_header.version not supported.
 OXPBRC_BAD_TYPE = 1,                 # oxp_header.type not supported.
-OXPBRC_BAD_EXPERIMENTER = 2,        # Experimenter id not supported
-OXPBRC_BAD_EXP_TYP = 3,             # Experimenter type not supported.
+OXPBRC_BAD_EXPERIMENTER = 2,         # Experimenter id not supported
+OXPBRC_BAD_EXP_TYP = 3,              # Experimenter type not supported.
 OXPBRC_EPERM = 4,                    # Permissions error.
 OXPBRC_BAD_LEN = 5,                  # Wrong request length for type.
 

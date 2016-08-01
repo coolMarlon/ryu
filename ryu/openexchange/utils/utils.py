@@ -194,8 +194,13 @@ def install_flow(datapaths, link2port, access_table, path,
         send_flow_mod(first_dp, reverse_flow_info, out_port, in_port)
         send_barrier_request(last_dp)
         if flag is None:
+            # if you annotate any one code below, it is coccrect.
+            # the duplicate packet won't be generated.
+            # But! pingall test will failed.
+            # xterm into host to ping a signle host is OK.
+
             send_packet_out(first_dp, buffer_id, in_port, out_port, data)
-            send_packet_out(last_dp, buffer_id, src_port, dst_port, data)
+            # send_packet_out(last_dp, buffer_id, src_port, dst_port, data)
     # src and dst on the same datapath
     else:
         out_port = get_port(flow_info[2], access_table)
