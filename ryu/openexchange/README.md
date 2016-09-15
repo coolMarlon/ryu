@@ -1,4 +1,4 @@
-#Open eXchange Protocol
+# Open eXchange Protocol
 
 Open eXchange Protocol is created by Cheng Li(http://www.muzixing.com).
 
@@ -9,25 +9,25 @@ There are two types of SDN controller:
 * Super Controller(SC)
 * Domain Controller(DC)
 
-###Get OXP
+### Get OXP
 
     git clone https://github.com/muzixing/ryu.git
 
-###Pre-install
+### Pre-install
 
 If you haven't install ryu before, please run pre_install.sh
 
     sudo bash pre_install.sh
 
-###Install
+### Install
 
     sudo ./install.sh
 
-###Configuration
+### Configuration
 
 You can config OXP deployment by OXP_CFG.py.
 
-###Implementation
+### Implementation
 
 * create user:group for oxp.
 
@@ -49,7 +49,7 @@ You can config OXP deployment by OXP_CFG.py.
 
         python oxp_run.py
 
-###Test
+### Test
 
 You can modify /openexchange/test/multi\_network.py to test Open eXchange Protocol.
 
