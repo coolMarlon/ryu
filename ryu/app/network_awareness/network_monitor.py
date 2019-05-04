@@ -1,3 +1,4 @@
+# coding=utf-8
 # Copyright (C) 2016 Li Cheng at Beijing University of Posts
 # and Telecommunications. www.muzixing.com
 #
@@ -43,6 +44,16 @@ class NetworkMonitor(app_manager.RyuApp):
     def __init__(self, *args, **kwargs):
         super(NetworkMonitor, self).__init__(*args, **kwargs)
         self.name = 'monitor'
+        # datapaths: 交换机
+        # port_status:端口状态
+        # port_speed:端口速度
+        # flow_status：流的状态
+        # flow_speed:交换机接收的流的速度：
+        # stats:
+        # port_features:端口的一些数据，(配置,转台、速度)
+        # free_bandwidth：剩余带宽 =容量-当前速度 (单位需转换)
+        # capabilities: src->dst 的最大带宽
+
         self.datapaths = {}
         self.port_stats = {}
         self.port_speed = {}
@@ -80,6 +91,7 @@ class NetworkMonitor(app_manager.RyuApp):
         """
             Main entry method of monitoring traffic.
         """
+        # bw 才显示
         while CONF.weight == 'bw':
             self.stats['flow'] = {}
             self.stats['port'] = {}
@@ -221,6 +233,7 @@ class NetworkMonitor(app_manager.RyuApp):
 
     def _get_free_bw(self, capacity, speed):
         # BW:Mbit/s
+        # capacity是以Kb为单位的，speed是以B为单位的
         return max(capacity/10**3 - speed * 8/10**6, 0)
 
     def _get_time(self, sec, nsec):
@@ -341,6 +354,7 @@ class NetworkMonitor(app_manager.RyuApp):
 
             port_feature = (config, state, p.curr_speed)
             self.port_features[dpid][p.port_no] = port_feature
+        # print ports
 
     @set_ev_cls(ofp_event.EventOFPPortStatus, MAIN_DISPATCHER)
     def _port_status_handler(self, ev):

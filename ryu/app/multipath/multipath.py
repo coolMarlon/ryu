@@ -1,3 +1,4 @@
+# coding=utf-8
 # Copyright (C) 2016 Li Cheng BUPT www.muzixing.com.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -41,6 +42,7 @@ class MULTIPATH_13(app_manager.RyuApp):
         self.datapaths = {}
         self.FLAGS = True
 
+    # 处理错误消息
     @set_ev_cls(
         ofp_event.EventOFPErrorMsg,
         [HANDSHAKE_DISPATCHER, CONFIG_DISPATCHER, MAIN_DISPATCHER])
@@ -50,6 +52,10 @@ class MULTIPATH_13(app_manager.RyuApp):
                           'message=%s', msg.type, msg.code,
                           utils.hex_array(msg.data))
 
+    """
+    交换机的状态发生改变
+    有新的交换机发现 and 交换机死亡
+    """
     @set_ev_cls(ofp_event.EventOFPStateChange,
                 [MAIN_DISPATCHER, DEAD_DISPATCHER])
     def _state_change_handler(self, ev):

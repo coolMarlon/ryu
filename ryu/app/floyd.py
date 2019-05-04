@@ -65,6 +65,7 @@ if __name__ == '__main__':
                     "s12":{"s1": 3, "s2": 5, "s10": 2, "s12":0},
     }
 
-    #new_graph, path= floyd_dict(graph_dict)    
+    new_graph, path= floyd_dict(graph_dict)
+    # print new_graph, '\n\n\n', path
     new_graph, path = floyd(graph_list)
     print new_graph, '\n\n\n', path

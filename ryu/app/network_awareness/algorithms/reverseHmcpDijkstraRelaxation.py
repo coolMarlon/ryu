@@ -1,9 +1,13 @@
-class ReverseHmcpDijkstraRelaxation:
+from ryu.app.network_awareness.algorithms.Relaxation import Relaxation
+
+
+class ReverseHmcpDijkstraRelaxation(Relaxation):
     def __init__(self, constraints):
+        # super(ReverseHmcpDijkstraRelaxation, self).__init__()
+        Relaxation.__init__(self)
         self.constraints = constraints
         self.r = {}
         self.R = {}
-        self.predecessors = {}
 
     def reset(self, graph, node_from):
         for node in graph.adjacency():
@@ -39,19 +43,7 @@ class ReverseHmcpDijkstraRelaxation:
         return self.r[node_a] < self.r[node_b]
 
     def guaranteedFailure(self, node_from, numMetrics):
-        return self.R[node_from] > numMetrics
+        return self.r[node_from] > numMetrics
 
     def getRDist(self, node, metric):
         return self.R[node][metric]
-
-    def buildPath(self, graph, node_from, node_to):
-        nodes = []
-        current = node_to
-        while current != node_from:
-            if self.predecessors[current] == current and current != node_from:
-                return None
-            nodes.append(current)
-            current = self.predecessors[current]
-        nodes.append(node_from)
-        nodes.reverse()
-        return nodes

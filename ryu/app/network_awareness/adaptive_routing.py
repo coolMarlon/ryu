@@ -16,36 +16,40 @@
 # limitations under the License.
 
 # conding=utf-8
-import logging
-import struct
+import json
 import networkx as nx
-from operator import attrgetter
 from ryu import cfg
+from ryu.app.network_awareness.algorithms.test_hmcop import init_topo, hmcp, print_topo
 from ryu.base import app_manager
 from ryu.controller import ofp_event
 from ryu.controller.handler import MAIN_DISPATCHER, DEAD_DISPATCHER
-from ryu.controller.handler import CONFIG_DISPATCHER
 from ryu.controller.handler import set_ev_cls
 from ryu.ofproto import ofproto_v1_3
 from ryu.lib.packet import packet
 from ryu.lib.packet import ethernet
 from ryu.lib.packet import ipv4
 from ryu.lib.packet import arp
-
-from ryu.topology import event, switches
-from ryu.topology.api import get_switch, get_link
+from ryu.app.wsgi import ControllerBase
+from ryu.app.wsgi import Response
+from ryu.app.wsgi import route
+from ryu.app.wsgi import WSGIApplication
 
 import network_awareness
 import network_monitor
 import network_delay_detector
 
-import setting
-
 CONF = cfg.CONF
 
 CONSTRAINT_NAME = ['delay', 'bw', 'packet_loss', 'jitter']
 
+qos_instance_name = 'qos_api_app'
+
+url = '/qos/metrics'
+
+
 # k条路径的k有什么意义？
+
+
 class ShortestForwarding(app_manager.RyuApp):
     """
         ShortestForwarding is a Ryu app for forwarding packets in shortest
@@ -58,7 +62,9 @@ class ShortestForwarding(app_manager.RyuApp):
     _CONTEXTS = {
         "network_awareness": network_awareness.NetworkAwareness,
         "network_monitor": network_monitor.NetworkMonitor,
-        "network_delay_detector": network_delay_detector.NetworkDelayDetector}
+        "network_delay_detector": network_delay_detector.NetworkDelayDetector,
+        'wsgi': WSGIApplication
+    }
 
     WEIGHT_MODEL = {'hop': 'weight', 'delay': "delay", "bw": "bw"}
 
@@ -70,13 +76,12 @@ class ShortestForwarding(app_manager.RyuApp):
         self.delay_detector = kwargs["network_delay_detector"]
         self.datapaths = {}
         self.weight = self.WEIGHT_MODEL[CONF.weight]
-        self.graph = nx.DiGraph()
+        wsgi = kwargs['wsgi']
+        wsgi.register(QosController,
+                      {qos_instance_name: self})
 
-        self.c_delay = 1000         # constraint of delay,              unit :ms
-        self.c_bw = 10              # constraint of bandwidth,          unit :Mb
-        self.c_packet_loss = 3      # constraint of packet-loss rate,   unit :%
-        self.c_jitter = 10          # constraint of jitter,             unit :ms
-        self.constraint_value = 3
+        self.graph = nx.DiGraph()
+        self.constraint = {"delay": 10}
         # self.init_graph()
 
     # not use function
@@ -268,15 +273,10 @@ class ShortestForwarding(app_manager.RyuApp):
                 return best_path
 
     def my_get_path(self, src, dst):
-        constraint_value = setting.constraint_value
-        constraint = []
-        index = 0
-        # read constraint and store in constraint value
-        while constraint_value != 0:
-            constraint.append(CONSTRAINT_NAME[index])
-            index = index + 1
-            constraint_value = constraint_value >> 1
-        return nx.shortest_path(self.graph, src, dst, weight="delay")
+        graph = init_topo()
+        # path = hmcp(graph, 0, 5, self.constraint)
+        path=[1,2,3,6]
+        return path
 
     def get_sw(self, dpid, in_port, src, dst):
         """
@@ -287,7 +287,7 @@ class ShortestForwarding(app_manager.RyuApp):
 
         src_location = self.awareness.get_host_location(src)
         if in_port in self.awareness.access_ports[dpid]:
-            if (dpid,  in_port) == src_location:
+            if (dpid, in_port) == src_location:
                 src_sw = src_location[0]
             else:
                 return None
@@ -297,7 +297,6 @@ class ShortestForwarding(app_manager.RyuApp):
             dst_sw = dst_location[0]
 
         return src_sw, dst_sw
-
 
     def install_flow(self, datapaths, link_to_port, access_table, path,
                      flow_info, buffer_id, data=None):
@@ -400,6 +399,7 @@ class ShortestForwarding(app_manager.RyuApp):
                 # Path has already calculated, just get it.
                 # path=self.get_path(src_sw,dst_sw)
                 path = self.get_path(src_sw, dst_sw, weight=self.weight)
+                # path = self.my_get_path(src_sw, dst_sw)
                 self.logger.info("%s指标下:  [PATH]%s<-->%s: %s" % (self.weight, ip_src, ip_dst, path))
                 flow_info = (eth_type, ip_src, ip_dst, in_port)
                 # install flow entries to datapath along side the path.
@@ -438,3 +438,36 @@ class ShortestForwarding(app_manager.RyuApp):
         for i in range(1, 6):
             for j in range(1, 6):
                 self.graph[i][j]["delay"] = 0
+
+
+class QosController(ControllerBase):
+    def __init__(self, req, link, data, **config):
+        super(QosController, self).__init__(req, link, data, **config)
+        self.bw = 10
+        self.simple_switch_app = data[qos_instance_name]
+
+    @route('qos', url, methods=['GET'])
+    def set_qos_metrics(self, req, **kwargs):
+        body = json.dumps(self.simple_switch_app.constraint)
+        return Response(content_type='application/json', body=body)
+
+    @route('qos', url, methods=['PUT'])
+    def put_mac_table(self, req, **kwargs):
+        try:
+            new_entry = req.json if req.body else {}
+            self.simple_switch_app.constraint = new_entry
+            body = json.dumps(new_entry)
+            return Response(content_type='application/json', body=body)
+        except ValueError:
+            return Response(status=500)
+
+if __name__ == "__main__":
+    # 初始化topo
+    G = init_topo()
+
+    # 打印topo
+    print_topo(G)
+
+    constraints = {"delay": 10, "jitter": 10}
+    path = hmcp(G, 0, 5, constraints)
+    print path

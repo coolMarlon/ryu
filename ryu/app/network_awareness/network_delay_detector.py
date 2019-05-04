@@ -1,3 +1,4 @@
+# coding=utf-8
 # Copyright (C) 2016 Li Cheng at Beijing University of Posts
 # and Telecommunications. www.muzixing.com
 #
@@ -32,6 +33,7 @@ import setting
 
 CONF = cfg.CONF
 
+# 原理 http://www.muzixing.com/pages/2016/05/24/ryuwang-luo-shi-yan-tan-ce-ying-yong.html
 
 class NetworkDelayDetector(app_manager.RyuApp):
     """
@@ -71,6 +73,7 @@ class NetworkDelayDetector(app_manager.RyuApp):
             Delay detecting functon.
             Send echo request and calculate link delay periodically
         """
+        # delay才显示
         while CONF.weight == 'delay':
             self._send_echo_request()
             self.create_link_delay()

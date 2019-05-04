@@ -32,7 +32,7 @@ from ryu.app.network_awareness.algorithms.lookAheadHmcpDijkstraRelaxation import
 from ryu.app.network_awareness.algorithms.reverseHmcpDijkstraRelaxation import ReverseHmcpDijkstraRelaxation
 
 
-def print_topo():
+def print_topo(G):
     # 生成节点标签
     labels = {}
     labels[0] = '0'
@@ -40,8 +40,9 @@ def print_topo():
     labels[2] = '2'
     labels[3] = '3'
     labels[4] = '4'
+    labels[5] = '5'
 
-    check_constri = "delay"
+    check_constri = "jitter"
 
     # 获取graph中的边权重
     edge_labels = nx.get_edge_attributes(G, check_constri)
@@ -79,10 +80,10 @@ def print_topo():
 
 def init_topo():
     G = nx.Graph()
-    G.add_nodes_from({0, 1, 2, 3, 4})
+    G.add_nodes_from({0, 1, 2, 3, 4, 5})
 
     # Network topo
-    G.add_edges_from([(0, 1), (0, 2), (1, 2), (1, 3), (1, 4), (2, 3), (3, 4)])
+    G.add_edges_from([(0, 1), (0, 2), (1, 2), (1, 3), (1, 4), (2, 5), (3, 5),(4,5)])
 
     for l in G.adjacency():
         # print l[0]
@@ -96,27 +97,25 @@ def init_topo():
             G[l[0]][j]['loss'] = 1
 
     # set delay
-
-    G[1][4]['delay'] = 197
-    G[3][2]['delay'] = 762
-    G[3][1]['delay'] = 379
-    G[4][3]['delay'] = 630
-    G[1][2]['delay'] = 713
-    G[0][1]['delay'] = 307
-    G[0][2]['delay'] = 158
-
-    # set bandwidth
-    G[1][2]['bw'] = 50
-    G[1][3]['bw'] = 80
+    G[0][1]['delay'] = 2
+    G[0][2]['delay'] = 5
+    G[1][2]['delay'] = 4
+    G[1][3]['delay'] = 1
+    G[1][4]['delay'] = 4
+    G[2][5]['delay'] = 5
+    G[3][5]['delay'] = 3
+    G[4][5]['delay'] = 2
 
     # set jitter
-    # set bandwidth
-    G[1][2]['jitter'] = 60
-    G[1][3]['jitter'] = 90
+    G[0][1]['jitter'] = 3
+    G[0][2]['jitter'] = 6
+    G[1][2]['jitter'] = 3
+    G[1][3]['jitter'] = 2
+    G[1][4]['jitter'] = 5
+    G[2][5]['jitter'] = 4
+    G[3][5]['jitter'] = 4
+    G[4][5]['jitter'] = 1
 
-    # set loss
-
-    # print_topo()
     return G
 
 
@@ -155,16 +154,16 @@ def hmcp(graph, start, end, constraints):
     # Search reverse.
     reverse_relaxation = ReverseHmcpDijkstraRelaxation(constraints)
     reverse_path_finder = DijkstraPathFinder(reverse_relaxation)
-    if reverse_path_finder.find(graph, start, end) is None:
+    if reverse_path_finder.find(graph, end, start) is None:
         return None
 
-    if reverse_relaxation.guaranteedFailure(start, len(constraints)):
+    if reverse_relaxation.guaranteedFailure(end, len(constraints)):
         return None
 
     # Search look ahead
-    look_ahead_relaxation=LookAheadHmcpDijkstraRelaxation(constraints,reverse_relaxation)
-    look_ahead_path_finder=DijkstraPathFinder(look_ahead_relaxation)
-    path=look_ahead_path_finder.find(graph,start,end)
+    look_ahead_relaxation = LookAheadHmcpDijkstraRelaxation(constraints, reverse_relaxation)
+    look_ahead_path_finder = DijkstraPathFinder(look_ahead_relaxation)
+    path = look_ahead_path_finder.find(graph, start, end)
     if path is None:
         return None
     if look_ahead_relaxation.constraintsFulfilled(end, len(constraints)) is False:
@@ -182,9 +181,8 @@ if __name__ == "__main__":
     G = init_topo()
 
     # 打印topo
-    # print_topo()
+    print_topo(G)
 
-    constraints = {"delay": 1154, "jitter": 10}
-    path = hmcp(G, 0, 4, constraints)
-    # print(nx.shortest_path(G, 4, 2, weight='delay'))
+    constraints = {"delay": 10, "jitter": 10}
+    path = hmcp(G, 0, 5, constraints)
     print path

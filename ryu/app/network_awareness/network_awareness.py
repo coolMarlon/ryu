@@ -1,3 +1,4 @@
+# coding=utf-8
 # Copyright (C) 2016 Li Cheng at Beijing University of Posts
 # and Telecommunications. www.muzixing.com
 #
@@ -277,6 +278,7 @@ class NetworkAwareness(app_manager.RyuApp):
     def show_topology(self):
         switch_num = len(list(self.graph.nodes()))
         if self.pre_graph != self.graph and setting.TOSHOW:
+            # 这里的显示好像有bug？
             print "---------------------Topo Link---------------------"
             print '%10s' % ("switch"),
             for i in self.graph.nodes():
@@ -289,6 +291,7 @@ class NetworkAwareness(app_manager.RyuApp):
                 print ""
             self.pre_graph = copy.deepcopy(self.graph)
 
+        # 只打印发生变化的link_to_port
         if self.pre_link_to_port != self.link_to_port and setting.TOSHOW:
             print "---------------------Link Port---------------------"
             print '%10s' % ("switch"),
@@ -305,6 +308,7 @@ class NetworkAwareness(app_manager.RyuApp):
                 print ""
             self.pre_link_to_port = copy.deepcopy(self.link_to_port)
 
+        # 只打印发生变化的access_table
         if self.pre_access_table != self.access_table and setting.TOSHOW:
             print "----------------Access Host-------------------"
             print '%10s' % ("switch"), '%12s' % "Host"
