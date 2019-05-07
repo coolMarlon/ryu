@@ -3,7 +3,6 @@ from ryu.app.network_awareness.algorithms.Relaxation import Relaxation
 
 class ReverseHmcpDijkstraRelaxation(Relaxation):
     def __init__(self, constraints):
-        # super(ReverseHmcpDijkstraRelaxation, self).__init__()
         Relaxation.__init__(self)
         self.constraints = constraints
         self.r = {}
