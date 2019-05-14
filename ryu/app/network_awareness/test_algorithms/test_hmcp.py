@@ -9,7 +9,6 @@ class TestHMCP(unittest.TestCase):
     def test_hmcp(self):
         # init topology
         graph = HumanTopology.init_topology()
-
         constraints = {"delay": 10, "jitter": 10}
         path = hmcp(graph, 0, 5, constraints)
         expected_path = [0, 1, 4, 5]
@@ -24,6 +23,15 @@ class TestHMCP(unittest.TestCase):
         path = hmcp(graph, 's1', 's6', constraints)
         print path
         expected_path = ['s1', 's2', 's5', 's6']
+        self.assertEqual(path, expected_path)
+
+    def test_hmcp_with_graph2(self):
+        graph = HumanTopology.init_topology(
+            path='/home/coolmarlon/Desktop/Code/mininet/examples/adaptive.mn')
+        constraints = {"delay": 7.5, "jitter": 10}
+        path = hmcp(graph, 's1', 's6', constraints)
+        print path
+        expected_path = ['s1', 's2', 's4', 's6']
         self.assertEqual(path, expected_path)
 
 
