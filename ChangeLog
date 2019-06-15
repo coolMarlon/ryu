@@ -1,6 +1,9 @@
 CHANGES
 =======
 
+* add more comprehensive test on hmcp algorithms
+* Reconstruct Code, add unit test mode. and add code to support construct networkx object from xxx.mn file
+* finish almost all code
 * finish hmcp algorithms's reverse dijkstra part
 * fixed syntax error of class string
 * fixed bug of getting frew bw

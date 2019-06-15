@@ -71,52 +71,19 @@ class HumanTopology:
                     graph.add_node(switch['opts']['hostname'].encode("utf8"))
 
                 for link in parsed_json['links']:
-                    if link['src'].encode("utf8").startswith('h') or link['dest'].encode("utf8").startswith('h'):
+                    if link['src'].encode("utf8").startswith('h') \
+                            or link['dest'].encode("utf8").startswith('h'):
                         continue
                     graph.add_edge(link['src'].encode("utf8"), link['dest'].encode("utf8"))
                     for key, value in link['opts'].items():
-                        int_value = int(value.encode("utf8"))
-                        graph[link['src'].encode("utf8")][link['dest'].encode("utf8")][key.encode("utf8")] = int_value
+                        if key.encode("utf8") == 'bw':
+                            int_value = value
+                        else:
+                            int_value = int(value.encode("utf8"))
+                        graph[link['src'].encode("utf8")][link['dest'].encode("utf8")] \
+                            [key.encode("utf8")] = int_value
             finally:
                 if f:
                     f.close()  # 确保文件被关闭
                     return graph
-        else:
-            graph = nx.Graph()
-            graph.add_nodes_from({0, 1, 2, 3, 4, 5})
-
-            # Network topo
-            graph.add_edges_from([(0, 1), (0, 2), (1, 2), (1, 3), (1, 4), (2, 5), (3, 5), (4, 5)])
-
-            for l in graph.adjacency():
-                # print l[0]
-                # print l[1]
-                for j in l[1]:
-                    # print j
-                    graph[l[0]][j]['weight'] = 1
-                    graph[l[0]][j]['bw'] = 100
-                    graph[l[0]][j]['delay'] = 10
-                    graph[l[0]][j]['jitter'] = 10
-                    graph[l[0]][j]['loss'] = 1
-
-            # set delay
-            graph[0][1]['delay'] = 2
-            graph[0][2]['delay'] = 5
-            graph[1][2]['delay'] = 4
-            graph[1][3]['delay'] = 1
-            graph[1][4]['delay'] = 4
-            graph[2][5]['delay'] = 5
-            graph[3][5]['delay'] = 3
-            graph[4][5]['delay'] = 2
-
-            # set jitter
-            graph[0][1]['jitter'] = 3
-            graph[0][2]['jitter'] = 6
-            graph[1][2]['jitter'] = 3
-            graph[1][3]['jitter'] = 2
-            graph[1][4]['jitter'] = 5
-            graph[2][5]['jitter'] = 4
-            graph[3][5]['jitter'] = 4
-            graph[4][5]['jitter'] = 1
-
         return graph

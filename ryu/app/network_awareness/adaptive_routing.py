@@ -19,7 +19,9 @@
 import json
 import networkx as nx
 from ryu import cfg
-from ryu.app.network_awareness.algorithms.test_hmcop import init_topo, hmcp, print_topo
+from ryu.app.network_awareness.algorithms.adaptive_routing_algorithm import adaptive_routing_algorithm
+from ryu.app.network_awareness.algorithms.hmcp import hmcp
+from ryu.app.network_awareness.algorithms.humanTopology import HumanTopology
 from ryu.base import app_manager
 from ryu.controller import ofp_event
 from ryu.controller.handler import MAIN_DISPATCHER, DEAD_DISPATCHER
@@ -81,7 +83,7 @@ class ShortestForwarding(app_manager.RyuApp):
                       {qos_instance_name: self})
 
         self.graph = nx.DiGraph()
-        self.constraint = {"delay": 10}
+        self.constraint = {"bw": 12}
         # self.init_graph()
 
     # not use function
@@ -240,8 +242,10 @@ class ShortestForwarding(app_manager.RyuApp):
         """
         shortest_paths = self.awareness.shortest_paths
         graph = self.awareness.graph
+        print "src %d , dst %d" % (src, dst)
 
         if weight == self.WEIGHT_MODEL['hop']:
+            print "path :", shortest_paths.get(src).get(dst)[0]
             return shortest_paths.get(src).get(dst)[0]
         elif weight == self.WEIGHT_MODEL['delay']:
             # If paths existed, return it, else calculate it and save it.
@@ -273,10 +277,10 @@ class ShortestForwarding(app_manager.RyuApp):
                 return best_path
 
     def my_get_path(self, src, dst):
-        graph = init_topo()
-        # path = hmcp(graph, 0, 5, self.constraint)
-        path=[1,2,3,6]
-        return path
+        graph = HumanTopology.init_topology(path='/home/coolmarlon/Desktop/Code/mininet/examples/adaptive.mn')
+        for l in graph.adjacency():
+            print l
+        return adaptive_routing_algorithm(graph, src, dst, self.constraint.copy())
 
     def get_sw(self, dpid, in_port, src, dst):
         """
@@ -304,6 +308,15 @@ class ShortestForwarding(app_manager.RyuApp):
             Install flow entires for roundtrip: go and back.
             @parameter: path=[dpid1, dpid2...]
                         flow_info=(eth_type, src_ip, dst_ip, in_port)
+                        datapaths:
+                        link_to_port:   (src_dpid,dst_dpid)->(src_port,dst_port)
+                        access_table:   {(sw,port) :[host1_ip]}
+                        path:           [1,2,3,6]
+                        flow_info:
+                        buffer_id:      (eth_type, ip_src, ip_dst, in_port)
+
+
+
         '''
         """
         input:
@@ -319,8 +332,15 @@ class ShortestForwarding(app_manager.RyuApp):
         流程：
         如果path为空或者path长度为0，报错，程序结束。
         如果path长度>2：
+            中间链路的2个交换机均安装出入两个方向的Flow
         如果path长度>1：
-        否则 src和dst是相同的交换机
+            dst交换机安装出入两个方向的Flow
+            src交换机安装出入两个方向的Flow
+            发送packet_out消息给src交换机
+        否则：
+            src(dst)交换机安装出入两个方向的Flow
+            发送packet_out消息给src(dst)交换机
+            
         """
         if path is None or len(path) == 0:
             self.logger.info("Path error!")
@@ -398,9 +418,10 @@ class ShortestForwarding(app_manager.RyuApp):
             if dst_sw:
                 # Path has already calculated, just get it.
                 # path=self.get_path(src_sw,dst_sw)
-                path = self.get_path(src_sw, dst_sw, weight=self.weight)
-                # path = self.my_get_path(src_sw, dst_sw)
-                self.logger.info("%s指标下:  [PATH]%s<-->%s: %s" % (self.weight, ip_src, ip_dst, path))
+                # path = self.get_path(src_sw, dst_sw, weight=self.weight)
+                path = self.my_get_path(src_sw, dst_sw)
+                self.logger.info("QoS约束:%s  " % str(self.constraint))
+                self.logger.info("[PATH]%s<-->%s: %s" % (ip_src, ip_dst, path))
                 flow_info = (eth_type, ip_src, ip_dst, in_port)
                 # install flow entries to datapath along side the path.
                 self.install_flow(self.datapaths,
@@ -443,12 +464,12 @@ class ShortestForwarding(app_manager.RyuApp):
 class QosController(ControllerBase):
     def __init__(self, req, link, data, **config):
         super(QosController, self).__init__(req, link, data, **config)
-        self.bw = 10
         self.simple_switch_app = data[qos_instance_name]
 
     @route('qos', url, methods=['GET'])
-    def set_qos_metrics(self, req, **kwargs):
+    def get_qos_metrics(self, req, **kwargs):
         body = json.dumps(self.simple_switch_app.constraint)
+        body = body + "\n"
         return Response(content_type='application/json', body=body)
 
     @route('qos', url, methods=['PUT'])
@@ -457,17 +478,7 @@ class QosController(ControllerBase):
             new_entry = req.json if req.body else {}
             self.simple_switch_app.constraint = new_entry
             body = json.dumps(new_entry)
+            body = body + "\n"
             return Response(content_type='application/json', body=body)
         except ValueError:
             return Response(status=500)
-
-if __name__ == "__main__":
-    # 初始化topo
-    G = init_topo()
-
-    # 打印topo
-    print_topo(G)
-
-    constraints = {"delay": 10, "jitter": 10}
-    path = hmcp(G, 0, 5, constraints)
-    print path

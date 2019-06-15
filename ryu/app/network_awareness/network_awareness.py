@@ -279,16 +279,16 @@ class NetworkAwareness(app_manager.RyuApp):
         switch_num = len(list(self.graph.nodes()))
         if self.pre_graph != self.graph and setting.TOSHOW:
             # 这里的显示好像有bug？
-            print "---------------------Topo Link---------------------"
-            print '%10s' % ("switch"),
-            for i in self.graph.nodes():
-                print '%10d' % i,
-            print ""
-            for i in self.graph.nodes():
-                print '%10d' % i,
-                for j in self.graph[i].values():
-                    print '%10.0f' % j['weight'],
-                print ""
+            # print "---------------------Topo Link---------------------"
+            # print '%10s' % ("switch"),
+            # for i in self.graph.nodes():
+            #     print '%10d' % i,
+            # print ""
+            # for i in self.graph.nodes():
+            #     print '%10d' % i,
+            #     for j in self.graph[i].values():
+            #         print '%10.0f' % j['weight'],
+            #     print ""
             self.pre_graph = copy.deepcopy(self.graph)
 
         # 只打印发生变化的link_to_port

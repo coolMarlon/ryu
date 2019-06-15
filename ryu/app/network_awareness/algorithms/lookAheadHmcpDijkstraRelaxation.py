@@ -27,8 +27,8 @@ class LookAheadHmcpDijkstraRelaxation(Relaxation):
         edge = graph[node_from][node_to]
 
         # The labels for the "tmp" node
-        GTmp=[]
-        RTmp=[]
+        GTmp = []
+        RTmp = []
         for m in range(len(self.constraints)):
             GTmp.append(0.0)
             RTmp.append(0.0)
@@ -37,23 +37,21 @@ class LookAheadHmcpDijkstraRelaxation(Relaxation):
 
         # Pick the weight that increases the normalized cost the most
         for m in range(len(self.constraints)):
-            newWeight = (self.G[node_from][m] + edge[self.constraints.keys()[m]]) \
-                        / self.constraints.values()[m]
+            newWeight = (self.G[node_from][m] + edge[self.constraints.keys()[m]]) / self.constraints.values()[m]
             if newWeight > fTmp:
-                fTmp= newWeight
+                fTmp = newWeight
 
         # Fill the tmp aggregations
         for m in range(len(self.constraints)):
-            GTmp[m]=self.G[node_from][m]+edge[self.constraints.keys()[m]]
-            RTmp[m]=self.reverse_relaxation.getRDist(node_to,m)
+            GTmp[m] = self.G[node_from][m] + edge[self.constraints.keys()[m]]
+            RTmp[m] = self.reverse_relaxation.getRDist(node_to, m)
 
         # Check and relax
-        RTo=[]
+        RTo = []
         for m in range(len(self.constraints)):
-            RTo.append(self.reverse_relaxation.getRDist(node_to,m))
+            RTo.append(self.reverse_relaxation.getRDist(node_to, m))
 
-        if self.preferTheBest(node_from,node_to,GTmp,RTmp,\
-                              self.G[node_to],RTo,fTmp,len(self.constraints)):
+        if self.preferTheBest(node_from, node_to, GTmp, RTmp, self.G[node_to], RTo, fTmp, len(self.constraints)):
             self.f[node_to] = fTmp
             self.predecessors[node_to] = node_from
             for m in range(len(self.constraints)):
@@ -66,28 +64,28 @@ class LookAheadHmcpDijkstraRelaxation(Relaxation):
 
     def constraintsFulfilled(self, node_to, numMetrics):
         for m in range(len(self.constraints)):
-            if self.G[node_to][m]>self.constraints.values()[m]:
+            if self.G[node_to][m] > self.constraints.values()[m]:
                 return False
         return True
 
     def preferTheBest(self, node_a, node_b, Ga, Ra, Gb, Rb, fa, M):
         # Does A fulfill the constraints?
-        aFulfills =True
+        aFulfills = True
         for m in range(len(self.constraints)):
-            if Ga[m]+Ra[m]>self.constraints.values()[m]:
-                aFulfills=False
+            if Ga[m] + Ra[m] > self.constraints.values()[m]:
+                aFulfills = False
                 break
         if aFulfills:
             return True
 
         # Does B fulfill the constraints?
-        bFulfills =True
+        bFulfills = True
         for m in range(len(self.constraints)):
-            if Gb[m]+Rb[m]>self.constraints.values()[m]:
-                bFulfills=False
+            if Gb[m] + Rb[m] > self.constraints.values()[m]:
+                bFulfills = False
                 break
         if bFulfills:
-            return True
+            return False
 
         # If got here then just compare forward aggregates
-        return fa<self.f[node_b]
+        return fa < self.f[node_b]
