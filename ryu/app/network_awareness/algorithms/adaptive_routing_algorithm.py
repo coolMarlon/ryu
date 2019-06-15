@@ -9,7 +9,6 @@ def adaptive_routing_algorithm(graph, src, dst, constraints):
     switch_src = "s" + str(src)
     switch_dst = "s" + str(dst)
     path = []
-    constraints=constraints.
     # first pre treat the graph to remove links whcih don't follow the bandwidth requirement
     if "bw" in constraints:
         for l in graph.adjacency():
